@@ -1,0 +1,9 @@
+PyGithub>=1.59.0
+pydantic>=2.8.0
+pydantic-settings>=2.3.0
+pyyaml>=6.0
+
+[dev]
+pytest>=8.3.0
+pytest-asyncio>=0.23.0
+ruff>=0.8.0

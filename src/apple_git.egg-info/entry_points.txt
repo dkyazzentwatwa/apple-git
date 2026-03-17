@@ -1,0 +1,2 @@
+[console_scripts]
+apple-git = apple_git.__main__:main

@@ -1,0 +1,29 @@
+name: Auto-create branch from issue
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  create-branch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create branch for issue
+        run: |
+          ISSUE_NUM=${{ github.event.issue.number }}
+          BRANCH_NAME="issue-${ISSUE_NUM}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and push the branch from main
+          git checkout main
+          git pull origin main
+          git checkout -b "$BRANCH_NAME"
+          git push origin "$BRANCH_NAME"
+
+          echo "Created branch: $BRANCH_NAME"
