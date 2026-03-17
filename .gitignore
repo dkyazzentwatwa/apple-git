@@ -1,0 +1,100 @@
+# Environment & Config
+.env
+.env.local
+*.config.yaml
+config/config.local.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv
+venv/
+ENV/
+env/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Logs
+*.log
+logs/
+~/.apple-git/*.log
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+~/.apple-git/apple_git.sqlite
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# System
+Thumbs.db
+.DS_Store
+
+# Test scripts (temporary debugging)
+test_*.py
+
+# Pycache
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Build
+build/
+dist/
+*.egg-info/

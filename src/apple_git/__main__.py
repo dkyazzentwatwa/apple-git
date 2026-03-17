@@ -85,10 +85,11 @@ class AppleGit:
                 section=self.settings.reminders.list_issue_ready,
                 reminder_title=rem.name,
             )
-            # Include branch name in annotation for easy copy-paste
             branch_name = f"issue-{issue.number}"
-            note = f"Issue #{issue.number}: {issue.url}\nBranch: {branch_name}"
-            self.reminders_issue_ready.annotate_reminder(rem.id, note)
+            self.reminders_issue_ready.update_body_tags(rem.id, "", f"#branch:{branch_name}")
+            self.reminders_issue_ready.set_reminder_url(rem.id, issue.url)
+            self.reminders_issue_ready.annotate_reminder(rem.id, f"Issue #{issue.number}")
+
             if self.notes_client:
                 self.notes_client.log_event("issue_created", {
                     "reminder": rem.name,
@@ -110,6 +111,7 @@ class AppleGit:
                 logger.warning("GitHub client not configured")
                 return
             issue_number = mapping.get("github_issue_number")
+            self.github_client.ensure_branch(branch)
             pr = self.github_client.create_pr(
                 title=rem.name,
                 body=rem.body,

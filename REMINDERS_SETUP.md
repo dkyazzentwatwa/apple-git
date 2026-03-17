@@ -47,12 +47,13 @@ Body: "User gets redirected to wrong URL after login.
 
 ### Creating or Linking a PR
 
-**Automated workflow:**
+**Fully automated workflow:**
 1. When you move reminder to **dev-issue-ready**, apple-git creates GitHub issue
 2. GitHub Action automatically creates branch: `issue-{number}`
-3. Reminder annotated with branch name for reference
-4. When you move to **dev-review**, add:
-   - **`#branch:issue-123`** tag (from reminder annotation) → apple-git creates PR
+3. Reminder auto-annotated with:
+   - Issue link
+   - `#branch:issue-123` tag (already added!)
+4. When you move to **dev-review**, PR is created automatically ✨
 
 **Steps:**
 
@@ -60,18 +61,15 @@ Body: "User gets redirected to wrong URL after login.
 1. Move reminder to dev-issue-ready
    → ✓ Issue #123 created
    → ✓ Branch issue-123 auto-created by GitHub
-   → Reminder shows: "Issue #123\nBranch: issue-123"
+   → ✓ Tag #branch:issue-123 auto-added to body
 
 2. Do your work on the branch:
    git checkout issue-123
    git commit...
    git push
 
-3. Add tag to reminder body:
-   #branch:issue-123
-
-4. Move reminder to dev-review
-   → ✓ PR created automatically
+3. Move reminder to dev-review
+   → ✓ PR created automatically (tag already there!)
 ```
 
 Example:
@@ -150,9 +148,16 @@ Watch the logs and Apple Notes for activity.
 
 ### Tag Syntax
 
-- **`#branch:my-feature-name`** — Create PR from this branch
+- **`#branch:issue-N`** — **Auto-added when issue is created**
+  - Example: `#branch:issue-45` (automatically added by apple-git)
+  - The branch is auto-created by GitHub Action
+  - Just move to dev-review and PR is created!
+
+- **`#branch:custom-name`** — Create PR from custom branch
+  - For manually-created branches or existing branches
+  - Add this manually if not using auto-generated branches
   - Supports: alphanumeric, `-`, `/`, `.`, `_`
-  - Example: `#branch:fix/user-auth` or `#branch:feature.new-ui`
+  - Example: `#branch:fix/user-auth`
 
 - **GitHub PR URL** — Link existing PR
   - Automatically detected in body
@@ -175,14 +180,21 @@ Every action is logged to Apple Notes for audit trail:
 ## Troubleshooting
 
 ### Reminder not creating issue?
-- Make sure the reminder is in **issue-ready** list
+- Make sure the reminder is in **dev-issue-ready** list
 - Check logs: `~/.apple-git/apple-git.log`
 - Verify GitHub token in `config/config.yaml`
 
+### Branch not being created?
+- The GitHub Action creates branches automatically when issues are created
+- Check GitHub Actions tab in your repo for any failures
+- The branch will be named `issue-{number}` and pushed to origin
+- If the action fails, you can manually create the branch: `git checkout -b issue-123`
+
 ### PR not being created/linked?
-- For branch creation: reminder must have `#branch:name` tag
+- For auto-branch creation: reminder must have `#branch:issue-123` tag (copy from reminder annotation)
+- For custom branch: use `#branch:custom-name`
 - For URL linking: PR URL must be in reminder body
-- Reminder must be in **review** list
+- Reminder must be in **dev-review** list
 - If neither tag nor URL present, check Apple Notes log for `pr_review_skipped`
 
 ### Issue not closing?
@@ -195,7 +207,7 @@ Every action is logged to Apple Notes for audit trail:
 - Check macOS System Preferences → Privacy & Security → Automation for System Events permission
 - Reminders app should be running or accessible
 
-## Example Workflow
+## Example Workflow (Fully Automated)
 
 ```
 1. Create reminder: "Implement dark mode"
@@ -208,14 +220,20 @@ Every action is logged to Apple Notes for audit trail:
 
 3. Ready for issue tracking:
    → Move to dev-issue-ready
-   → ✓ GitHub Issue #45 created automatically
+   → ✓ Issue #45 created
+   → ✓ Branch issue-45 auto-created by GitHub Action
+   → ✓ Tag #branch:issue-45 auto-added to body
 
-4. Code ready:
+4. Work on code:
+   git checkout issue-45
+   git commit -m "implement dark mode"
+   git push
+
+5. Ready for PR:
    → Move to dev-review
-   → Add body: "#branch:feat/dark-mode"
-   → ✓ PR #47 created automatically
+   → ✓ PR #47 created automatically (tag already there!)
 
-5. PR merged:
+6. PR merged on GitHub:
    → Move to dev-done
    → Add body: "#merge"
    → ✓ PR #47 merged

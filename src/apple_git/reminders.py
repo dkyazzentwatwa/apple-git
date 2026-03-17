@@ -14,6 +14,7 @@ class Reminder:
     id: str
     name: str
     body: str
+    url: str
     list_name: str
     creation_date: str
     due_date: str
@@ -56,17 +57,25 @@ class RemindersClient:
             set rIds to id of every reminder of taskList
             set rNames to name of every reminder of taskList
             set rBodies to ""
+            set rUrls to ""
             repeat with r in (every reminder of taskList)
                 try
                     set b to body of r
                     if b is missing value then set b to ""
-                    set rBodies to rBodies & b & linefeed
+                    set rBodies to rBodies & b & "~~~"
                 on error
-                    set rBodies to rBodies & linefeed
+                    set rBodies to rBodies & "~~~"
+                end try
+                try
+                    set u to url of r
+                    if u is missing value then set u to ""
+                    set rUrls to rUrls & u & "~~~"
+                on error
+                    set rUrls to rUrls & "~~~"
                 end try
             end repeat
             set rListName to name of taskList as text
-            return (rIds as text) & "|" & (rNames as text) & "|" & rBodies & "|" & rListName
+            return (rIds as text) & "|" & (rNames as text) & "|" & rBodies & "|" & rUrls & "|" & rListName
         end tell
         '''
 
@@ -98,8 +107,12 @@ class RemindersClient:
 
         ids = parts[0].splitlines()
         names = parts[1].splitlines()
-        bodies = parts[2].splitlines() if len(parts) > 2 else []
-        list_name = parts[3].strip() if len(parts) > 3 else ""
+        # Bodies and URLs use "~~~" delimiter to preserve multi-line content
+        raw_bodies = parts[2] if len(parts) > 2 else ""
+        bodies = raw_bodies.split("~~~")
+        raw_urls = parts[3] if len(parts) > 3 else ""
+        urls = raw_urls.split("~~~")
+        list_name = parts[4].strip() if len(parts) > 4 else ""
 
         reminders = []
         for i in range(len(ids)):
@@ -107,6 +120,7 @@ class RemindersClient:
                 id=ids[i].strip(),
                 name=names[i].strip() if i < len(names) else "",
                 body=bodies[i].strip() if i < len(bodies) else "",
+                url=urls[i].strip() if i < len(urls) else "",
                 list_name=list_name,
                 creation_date="",
                 due_date="",
@@ -252,6 +266,47 @@ class RemindersClient:
             return result.returncode == 0 and "ok" in result.stdout
         except Exception as exc:
             logger.warning("Error updating body tags: %s", exc)
+            return False
+
+
+    def set_reminder_url(self, reminder_id: str, url: str) -> bool:
+        resolved_list = self._resolve_list_selector()
+        if resolved_list is None:
+            return False
+
+        if resolved_list.get("id"):
+            escaped_list_id = resolved_list["id"].replace('"', '\\"')
+            target_list_clause = f'set taskList to first list whose id is "{escaped_list_id}"'
+        else:
+            escaped_list_name = resolved_list["name"].replace('"', '\\"')
+            target_list_clause = f'set taskList to list "{escaped_list_name}"'
+
+        escaped_id = reminder_id.replace('"', '\\"')
+        escaped_url = url.replace("\\", "\\\\").replace('"', '\\"')
+
+        script = f'''
+        tell {REMINDERS_APP_TARGET}
+            try
+                {target_list_clause}
+                set matchedReminder to (first reminder of taskList whose id is "{escaped_id}")
+                set url of matchedReminder to "{escaped_url}"
+                return "ok"
+            on error errMsg
+                return "error: " & errMsg
+            end try
+        end tell
+        '''
+
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            return result.returncode == 0 and "ok" in result.stdout
+        except Exception as exc:
+            logger.warning("Error setting reminder URL: %s", exc)
             return False
 
 

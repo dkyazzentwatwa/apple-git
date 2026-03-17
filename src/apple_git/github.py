@@ -138,6 +138,26 @@ class GitHubClient:
             logger.error("Failed to merge PR #%d: %s", pr_number, exc)
             return False
 
+    def ensure_branch(self, branch_name: str, base: str = "main") -> bool:
+        """Create branch from base if it doesn't exist. Returns True if ready."""
+        if not self.repo:
+            return False
+        try:
+            self.repo.get_branch(branch_name)
+            return True  # already exists
+        except Exception:
+            try:
+                ref = self.repo.get_branch(base)
+                self.repo.create_git_ref(
+                    ref=f"refs/heads/{branch_name}",
+                    sha=ref.commit.sha,
+                )
+                logger.info("Created branch %s from %s", branch_name, base)
+                return True
+            except Exception as exc:
+                logger.error("Failed to create branch %s: %s", branch_name, exc)
+                return False
+
     def get_pr(self, pr_number: int) -> GitHubPR | None:
         if not self.repo:
             return None
