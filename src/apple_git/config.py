@@ -49,6 +49,7 @@ class AppleGitSettings(BaseSettings):
 
     db_path: Path = Path.home() / ".apple-git" / "apple_git.sqlite"
     log_file: Path = Path.home() / ".apple-git" / "apple-git.log"
+    repo_path: Path = Path.home() / "Documents" / "GitHub" / "flow-healer"
 
     @field_validator("db_path", "log_file", mode="after")
     @classmethod
@@ -81,6 +82,7 @@ class AppleGitSettings(BaseSettings):
             poll_interval_seconds=data.get("poll_interval_seconds", 5.0),
             db_path=Path(data.get("db_path", "~/.apple-git/apple_git.sqlite")).expanduser(),
             log_file=Path(data.get("log_file", "~/.apple-git/apple-git.log")).expanduser(),
+            repo_path=Path(data.get("repo_path", "~/Documents/GitHub/flow-healer")).expanduser(),
         )
 
 

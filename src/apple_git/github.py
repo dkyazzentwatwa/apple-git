@@ -138,6 +138,17 @@ class GitHubClient:
             logger.error("Failed to merge PR #%d: %s", pr_number, exc)
             return False
 
+    def branch_has_commits_ahead(self, branch_name: str, base: str = "main") -> bool:
+        """Return True if branch has at least one commit not in base."""
+        if not self.repo:
+            return False
+        try:
+            comparison = self.repo.compare(base, branch_name)
+            return comparison.ahead_by > 0
+        except Exception as exc:
+            logger.warning("Could not compare %s..%s: %s", base, branch_name, exc)
+            return False
+
     def ensure_branch(self, branch_name: str, base: str = "main") -> bool:
         """Create branch from base if it doesn't exist. Returns True if ready."""
         if not self.repo:

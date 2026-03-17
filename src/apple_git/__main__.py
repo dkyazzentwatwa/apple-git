@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -98,6 +99,40 @@ class AppleGit:
                     "branch": branch_name,
                 })
             logger.info("Created issue #%d for reminder %s (branch: %s)", issue.number, rem.id, branch_name)
+            self._spawn_claude_code(issue.number, rem.name, rem.body, branch_name)
+
+    def _spawn_claude_code(self, issue_number: int, title: str, body: str, branch: str) -> None:
+        repo_path = self.settings.repo_path
+        if not repo_path.exists():
+            logger.warning("repo_path %s does not exist — skipping Claude Code spawn", repo_path)
+            return
+
+        prompt = (
+            f"Work on GitHub issue #{issue_number}: {title}\n\n"
+            f"{body}\n\n"
+            f"Steps:\n"
+            f"1. git checkout {branch} (or git checkout -b {branch} main if it doesn't exist locally)\n"
+            f"2. Implement the changes required by the issue\n"
+            f"3. git add and git commit with a message referencing issue #{issue_number}\n"
+            f"4. git push origin {branch}"
+        )
+
+        try:
+            subprocess.Popen(
+                [
+                    "claude",
+                    "--model", "claude-haiku-4-5-20251001",
+                    "--dangerously-skip-permissions",
+                    "-p", prompt,
+                ],
+                cwd=str(repo_path),
+                start_new_session=True,
+            )
+            logger.info("Spawned Claude Code for issue #%d on branch %s in %s", issue_number, branch, repo_path)
+        except FileNotFoundError:
+            logger.error("claude CLI not found — is Claude Code installed and on PATH?")
+        except Exception as exc:
+            logger.warning("Failed to spawn Claude Code: %s", exc)
 
     def _handle_review(self, rem: reminders.Reminder, mapping: dict) -> None:
         # Skip if PR already linked (idempotency guard)
@@ -112,6 +147,9 @@ class AppleGit:
                 return
             issue_number = mapping.get("github_issue_number")
             self.github_client.ensure_branch(branch)
+            if not self.github_client.branch_has_commits_ahead(branch):
+                logger.info("Branch %s has no commits ahead of main yet — skipping PR creation", branch)
+                return
             pr = self.github_client.create_pr(
                 title=rem.name,
                 body=rem.body,
