@@ -29,7 +29,7 @@ class PRReviewer:
             return ""
 
         diff_text = "\n\n".join(
-            f"--- {f['filename']} ---\n{f['patch'][:3000]}" for f in diff_files
+            f"--- {f.get('filename', 'unknown')} ---\n{f.get('patch', '')[:3000]}" for f in diff_files
         )[:8000]
 
         prompt = (

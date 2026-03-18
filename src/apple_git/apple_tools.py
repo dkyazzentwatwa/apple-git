@@ -16,7 +16,7 @@ def reminders_resolve_list_selector(selector: str) -> dict[str, str] | None:
     tell application "Reminders"
         try
             set targetList to first list whose name is "{escaped_selector}"
-            return id of targetList & "|" & name of targetList & "|" & name of targetList & "|accessibility"
+            return id of targetList & "|" & name of targetList & "|" & "" & "|accessibility"
         on error
             try
                 set allLists to every list

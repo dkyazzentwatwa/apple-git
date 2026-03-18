@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -61,7 +61,7 @@ def mock_settings():
 def apple_git_instance(mock_settings):
     with (
         patch("src.apple_git.store.SQLiteStore") as MockStore,
-        patch("src.apple_git.reminders.RemindersClient") as MockRemindersClient,
+        patch("src.apple_git.reminders.RemindersClient") as _MockRemindersClient,
         patch("src.apple_git.github.GitHubClient") as MockGitHubClient,
         patch("src.apple_git.notes.NotesClient") as MockNotesClient,
         patch("src.apple_git.connector.build_connector") as MockBuildConnector,
@@ -275,7 +275,7 @@ async def test_process_handle_done_merge_conflict(apple_git_instance):
     apple_git_instance.github_client.merge_pr.assert_called_once_with(101)
     apple_git_instance.github_client.add_issue_comment.assert_called_once_with(
         1,
-        f"Formatted: Merge Failed",
+        "Formatted: Merge Failed",
     )
     apple_git_instance.reminders_done.update_status_line.assert_called_once_with(
         "rem1", "⚠️ Merge Conflict — Fix manually"
@@ -333,7 +333,7 @@ async def test_reap_connector_procs_success(apple_git_instance):
 
     apple_git_instance.github_client.add_issue_comment.assert_called_once_with(
         1,
-        f"Formatted: claude Success",
+        "Formatted: claude Success",
     )
     apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once_with(
         "rem1", "✅ Done — move to dev-review"
@@ -355,7 +355,7 @@ async def test_reap_connector_procs_error(apple_git_instance):
 
     apple_git_instance.github_client.add_issue_comment.assert_called_once_with(
         1,
-        f"Formatted: claude Error",
+        "Formatted: claude Error",
     )
     apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once_with(
         "rem1", "⚠️ claude error (exit 1) — check logs"

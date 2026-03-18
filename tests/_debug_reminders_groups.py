@@ -2,7 +2,6 @@
 """Test script to explore Reminders app structure, groups, and lists."""
 
 import subprocess
-import json
 from typing import Optional
 
 def run_applescript(script: str) -> Optional[str]:

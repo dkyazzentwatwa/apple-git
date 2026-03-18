@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 
@@ -19,7 +18,7 @@ def generate_tree(root: Path, max_depth: int = 2, max_files: int = 60) -> str:
 
     def _walk(path: Path, depth: int, prefix: str):
         nonlocal file_count
-        if depth > max_depth or file_count >= max_files:
+        if depth >= max_depth or file_count >= max_files:
             return
 
         try:
@@ -34,6 +33,7 @@ def generate_tree(root: Path, max_depth: int = 2, max_files: int = 60) -> str:
         filtered = [
             e for e in entries
             if e.name not in ignore_dirs and e.suffix not in ignore_exts
+            and not e.is_symlink()
         ]
 
         for i, entry in enumerate(filtered):
@@ -43,13 +43,12 @@ def generate_tree(root: Path, max_depth: int = 2, max_files: int = 60) -> str:
 
             is_last = i == len(filtered) - 1
             connector = "└── " if is_last else "├── "
-            
+            file_count += 1
+
             output.append(f"{prefix}{connector}{entry.name}{'/' if entry.is_dir() else ''}")
-            
+
             if entry.is_dir() and (depth + 1 <= max_depth):
                 _walk(entry, depth + 1, prefix + ("    " if is_last else "│   "))
-            else:
-                file_count += 1
 
     output.append(root.name + "/")
     _walk(root, 0, "")

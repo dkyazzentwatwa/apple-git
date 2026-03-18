@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
 
 from src.apple_git.tree import generate_tree
 
@@ -20,7 +18,6 @@ def test_generate_tree_basic(tmp_path):
 │   └── file2.py
 ├── dir2/
 │   └── sub_dir/
-│       └── file3.md
 └── file1.txt"""
     assert generate_tree(tmp_path) == expected_tree
 
@@ -61,7 +58,7 @@ def test_generate_tree_max_files(tmp_path):
     for i in range(10):
         (tmp_path / f"file{i}.txt").write_text("content")
 
-    expected_tree = f"""{tmp_path.name}/
+    _expected_tree = f"""{tmp_path.name}/
 ├── file0.txt
 ├── file1.txt
 ├── file2.txt

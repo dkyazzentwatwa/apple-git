@@ -140,13 +140,16 @@ class AppleGit:
                 continue
             mapping = self.store.get_mapping_by_reminder_id(rem.id)
             if mapping:
-                if self._handle_done(rem, mapping): # Check return value
+                if self._handle_done(rem, mapping):
                     self.store.delete_mapping(rem.id)
+                    self._completed_reminder_ids.add(rem.id)
+                    self.reminders_done.complete_reminder(rem.id)
+                # If _handle_done returned False (e.g. merge conflict), leave mapping + reminder intact
             else:
                 # No mapping means already processed in a previous run — just complete it
                 logger.debug("Reminder %s in done list with no mapping (already processed) — completing", rem.id)
-            self._completed_reminder_ids.add(rem.id)
-            self.reminders_done.complete_reminder(rem.id)
+                self._completed_reminder_ids.add(rem.id)
+                self.reminders_done.complete_reminder(rem.id)
 
     def _create_issue(self, rem: reminders.Reminder) -> None:
         if not self.github_client:
@@ -273,10 +276,7 @@ Steps:
                 # Add summary of commits to PR
                 commits = self.github_client.get_commits_on_branch(branch)
                 if commits:
-                    summary = "## Changes
-
-" + "
-".join(f"- {msg}" for msg in commits)
+                    summary = "## Changes\n\n" + "\n".join(f"- {msg}" for msg in commits)
                     self.github_client.add_pr_comment(pr.number, summary)
 
                 # Add AI-generated reviews if configured
@@ -350,7 +350,7 @@ Steps:
                 if issue_number:
                     comment = github.GitHubClient._format_comment(
                         "PR Merged",
-                        [f"PR #{pr.number} merged"],
+                        [f"PR #{pr_number} merged"],
                     )
                     self.github_client.add_issue_comment(issue_number, comment)
                     branch_name = f"issue-{issue_number}"
@@ -418,6 +418,7 @@ Steps:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
+                    proc.wait()
         self._claude_procs.clear()
         self.store.close()
 

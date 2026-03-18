@@ -19,17 +19,17 @@ print()
 # Test GitHub client
 if settings.github.token and settings.github.repo:
     gh = github.GitHubClient(settings.github.token, settings.github.repo)
-    print(f"✅ GitHub client initialized")
+    print("✅ GitHub client initialized")
     print(f"   Repo accessible: {gh.repo is not None}")
 else:
-    print(f"❌ GitHub client not configured (missing token or repo)")
+    print("❌ GitHub client not configured (missing token or repo)")
 print()
 
 # Check SQLite store
 print(f"🗄️  Database: {settings.db_path}")
 db_store = store.SQLiteStore(settings.db_path)
 db_store.bootstrap()
-print(f"✅ Database initialized")
+print("✅ Database initialized")
 print()
 
 # Test fetching reminders and check mapping
@@ -46,5 +46,5 @@ for rem in reminders_list:
     if mapping:
         print(f"   ⚠️  Already mapped: Issue #{mapping.get('github_issue_number')}")
     else:
-        print(f"   ✅ Not mapped - would create issue")
+        print("   ✅ Not mapped - would create issue")
         print(f"   Body preview: {rem.body[:100]}...")

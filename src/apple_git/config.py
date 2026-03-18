@@ -22,7 +22,6 @@ class GitHubSettings(BaseSettings):
 
 class RemindersSettings(BaseSettings):
     list_inactive: str = "dev-backlog"
-    list_started: str = "dev-started"
     list_issue_ready: str = "dev-issue-ready"
     list_review: str = "dev-review"
     list_done: str = "dev-done"
@@ -82,6 +81,45 @@ class AppleGitSettings(BaseSettings):
         env_token = os.environ.get("GITHUB_TOKEN", "")
         if env_token:
             github_data["token"] = env_token
+
+        # Let APPLE_GIT_* env vars override YAML values (env takes priority)
+        _env_str_overrides = {
+            "connector_backend": "APPLE_GIT_CONNECTOR_BACKEND",
+            "connector_model": "APPLE_GIT_CONNECTOR_MODEL",
+            "connector_command": "APPLE_GIT_CONNECTOR_COMMAND",
+            "anthropic_api_key": "APPLE_GIT_ANTHROPIC_API_KEY",
+        }
+        for key, env_var in _env_str_overrides.items():
+            val = os.environ.get(env_var)
+            if val is not None:
+                data[key] = val
+
+        for key, env_var in {
+            "poll_interval_seconds": "APPLE_GIT_POLL_INTERVAL_SECONDS",
+        }.items():
+            val = os.environ.get(env_var)
+            if val is not None:
+                try:
+                    data[key] = float(val)
+                except ValueError:
+                    pass
+
+        for key, env_var in {
+            "enable_pr_review": "APPLE_GIT_ENABLE_PR_REVIEW",
+            "enable_security_review": "APPLE_GIT_ENABLE_SECURITY_REVIEW",
+        }.items():
+            val = os.environ.get(env_var)
+            if val is not None:
+                data[key] = val.lower() not in {"0", "false", "no"}
+
+        for key, env_var in {
+            "db_path": "APPLE_GIT_DB_PATH",
+            "log_file": "APPLE_GIT_LOG_FILE",
+            "repo_path": "APPLE_GIT_REPO_PATH",
+        }.items():
+            val = os.environ.get(env_var)
+            if val is not None:
+                data[key] = val
 
         return cls(
             github=GitHubSettings(**github_data),

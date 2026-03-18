@@ -6,7 +6,7 @@ from src.apple_git.config import get_settings
 
 # Load settings
 settings = get_settings()
-print(f"📋 Loaded settings:")
+print("📋 Loaded settings:")
 print(f"  list_issue_ready: {settings.reminders.list_issue_ready}")
 print()
 
@@ -29,5 +29,5 @@ for label, list_name in lists_to_test:
             if rem.body:
                 print(f"       Body: {rem.body[:50]}...")
     else:
-        print(f"  ❌ No reminders found (or list not accessible)")
+        print("  ❌ No reminders found (or list not accessible)")
     print()

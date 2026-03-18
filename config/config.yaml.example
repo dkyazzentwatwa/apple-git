@@ -4,7 +4,6 @@ github:
 
 reminders:
   list_inactive: "dev-backlog"
-  list_started: "dev-started"
   list_issue_ready: "dev-issue-ready"
   list_review: "dev-review"
   list_done: "dev-done"
@@ -18,3 +17,14 @@ poll_interval_seconds: 15.0
 db_path: ~/.apple-git/apple_git.sqlite
 
 log_file: ~/.apple-git/apple-git.log
+
+repo_path: ~/Documents/GitHub/your-repo
+
+anthropic_api_key: ""  # Required for AI review features
+
+enable_pr_review: true
+enable_security_review: true
+
+connector_backend: "claude"  # claude | codex | kilo
+connector_model: ""           # Override default model for the chosen backend
+connector_command: ""         # Override CLI path if not on PATH

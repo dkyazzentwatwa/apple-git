@@ -87,13 +87,8 @@ def test_env_vars_override_yaml(tmp_path, clean_env):
     settings = AppleGitSettings.load_from_yaml(config_file)
 
     assert settings.github.token == "env_token"
-    # Note: in the current implementation of load_from_yaml, 
-    # it passes poll_interval_seconds=data.get(...) to the constructor.
-    # Pydantic prioritizes init kwargs over env vars.
-    # So if it's in YAML, it will NOT be overridden by Env Var in load_from_yaml.
-    # Let's adjust our expectation to match the implementation or change implementation.
-    # I'll adjust the expectation for now.
-    assert settings.poll_interval_seconds == 5.0
+    # APPLE_GIT_POLL_INTERVAL_SECONDS env var should override the YAML value
+    assert settings.poll_interval_seconds == 10.0
 
 
 def test_path_resolution():

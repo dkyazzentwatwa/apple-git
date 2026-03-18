@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import logging
 import re
 from dataclasses import dataclass
@@ -199,6 +200,8 @@ class GitHubClient:
 
 
     def add_issue_comment(self, issue_number: int, body: str) -> bool:
+        if not self.repo:
+            return False
         try:
             self.repo.get_issue(issue_number).create_comment(body)
             return True
@@ -207,6 +210,8 @@ class GitHubClient:
             return False
 
     def add_pr_comment(self, pr_number: int, body: str) -> bool:
+        if not self.repo:
+            return False
         try:
             self.repo.get_issue(pr_number).create_comment(body)
             return True
@@ -259,7 +264,6 @@ class GitHubClient:
         count = 0
         try:
             for branch in self.repo.get_branches():
-                import fnmatch
                 if fnmatch.fnmatch(branch.name, pattern):
                     try:
                         self.repo.get_git_ref(f"heads/{branch.name}").delete()

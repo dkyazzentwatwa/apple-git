@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import sys
 import time
 
-from pathlib import Path
 
 from src.apple_git.config import AppleGitSettings, get_settings
-from src.apple_git.reminders import RemindersClient
 
 logger = logging.getLogger("apple_git.setup")
 
@@ -30,10 +27,11 @@ def _run_applescript(script: str) -> str:
 
 def create_reminders_list(list_name: str) -> bool:
     """Creates a new Reminders list if it doesn't already exist."""
+    safe_name = list_name.replace("\\", "\\\\").replace('"', '\\"')
     script = f"""
     tell application "Reminders"
-        if not (exists list "{list_name}") then
-            make new list with properties {{name:"{list_name}"}}
+        if not (exists list "{safe_name}") then
+            make new list with properties {{name:"{safe_name}"}}
             return "true"
         else
             return "false"

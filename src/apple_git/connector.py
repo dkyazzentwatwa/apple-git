@@ -1,12 +1,15 @@
 """CLI connector abstraction for spawning AI coding agents in the background."""
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import threading
 import time
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+
+logger = logging.getLogger("apple_git.connector")
 
 
 @runtime_checkable
@@ -42,8 +45,8 @@ class ClaudeCliConnector:
     def is_available(self) -> bool:
         now = time.monotonic()
         with self._lock:
-            if self._available and now - self._last_check_at < 30:
-                return True
+            if now - self._last_check_at < 30:
+                return self._available
         self._resolve()
         with self._lock:
             return self._available
@@ -51,6 +54,8 @@ class ClaudeCliConnector:
     def spawn(self, prompt: str, cwd: Path) -> subprocess.Popen:
         with self._lock:
             resolved = self._resolved
+        if not resolved:
+            raise RuntimeError(f"Connector '{self.command}' is not available — is the CLI installed and on PATH?")
         cmd = [resolved]
         if self.dangerously_skip_permissions:
             cmd.append("--dangerously-skip-permissions")
@@ -94,8 +99,8 @@ class CodexCliConnector:
     def is_available(self) -> bool:
         now = time.monotonic()
         with self._lock:
-            if self._available and now - self._last_check_at < 30:
-                return True
+            if now - self._last_check_at < 30:
+                return self._available
         self._resolve()
         with self._lock:
             return self._available
@@ -103,6 +108,8 @@ class CodexCliConnector:
     def spawn(self, prompt: str, cwd: Path) -> subprocess.Popen:
         with self._lock:
             resolved = self._resolved
+        if not resolved:
+            raise RuntimeError(f"Connector '{self.command}' is not available — is the CLI installed and on PATH?")
         cmd = [resolved, "exec", "--yolo", "--skip-git-repo-check"]
         if self.model:
             cmd.extend(["-m", self.model])
@@ -115,8 +122,11 @@ class CodexCliConnector:
             start_new_session=True,
         )
         if proc.stdin:
-            proc.stdin.write(prompt.encode())
-            proc.stdin.close()
+            try:
+                proc.stdin.write(prompt.encode())
+                proc.stdin.close()
+            except (BrokenPipeError, OSError) as exc:
+                logger.warning("Failed to write to %s stdin: %s", self.backend_name, exc)
         return proc
 
     def _resolve(self) -> None:
@@ -152,8 +162,8 @@ class KiloCliConnector:
     def is_available(self) -> bool:
         now = time.monotonic()
         with self._lock:
-            if self._available and now - self._last_check_at < 30:
-                return True
+            if now - self._last_check_at < 30:
+                return self._available
         self._resolve()
         with self._lock:
             return self._available
@@ -161,6 +171,8 @@ class KiloCliConnector:
     def spawn(self, prompt: str, cwd: Path) -> subprocess.Popen:
         with self._lock:
             resolved = self._resolved
+        if not resolved:
+            raise RuntimeError(f"Connector '{self.command}' is not available — is the CLI installed and on PATH?")
         cmd = [resolved, "run", "--auto"]
         if self.model:
             cmd.extend(["--model", self.model])
@@ -171,8 +183,11 @@ class KiloCliConnector:
             start_new_session=True,
         )
         if proc.stdin:
-            proc.stdin.write(prompt.encode())
-            proc.stdin.close()
+            try:
+                proc.stdin.write(prompt.encode())
+                proc.stdin.close()
+            except (BrokenPipeError, OSError) as exc:
+                logger.warning("Failed to write to %s stdin: %s", self.backend_name, exc)
         return proc
 
     def _resolve(self) -> None:
