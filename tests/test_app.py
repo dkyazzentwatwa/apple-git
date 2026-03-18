@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.apple_git.config import AppleGitSettings
-from src.apple_git.__main__ import AppleGit
+from apple_git.config import AppleGitSettings
+from apple_git.__main__ import AppleGit
 
 
 class MockReminder:
@@ -38,9 +38,10 @@ class MockGitHubIssue:
 
 
 class MockGitHubPR:
-    def __init__(self, number: int, url: str):
+    def __init__(self, number: int, url: str, merged: bool = False):
         self.number = number
         self.url = url
+        self.merged = merged
 
 
 @pytest.fixture
@@ -48,6 +49,7 @@ def mock_settings():
     settings = AppleGitSettings(
         poll_interval_seconds=0.1,
         db_path=Path(":memory:"),
+        connector_logs_dir=Path("/tmp/connector-runs"),
         repo_path=Path("/tmp/mock_repo"),
         anthropic_api_key="test_anthropic_key",
         enable_pr_review=True,
@@ -60,16 +62,17 @@ def mock_settings():
 @pytest.fixture
 def apple_git_instance(mock_settings):
     with (
-        patch("src.apple_git.store.SQLiteStore") as MockStore,
-        patch("src.apple_git.reminders.RemindersClient") as _MockRemindersClient,
-        patch("src.apple_git.github.GitHubClient") as MockGitHubClient,
-        patch("src.apple_git.notes.NotesClient") as MockNotesClient,
-        patch("src.apple_git.connector.build_connector") as MockBuildConnector,
-        patch("src.apple_git.issue_analyzer.IssueAnalyzer") as MockIssueAnalyzer,
-        patch("src.apple_git.reviewer.PRReviewer") as MockPRReviewer,
-        patch("src.apple_git.security_reviewer.SecurityReviewer") as MockSecurityReviewer,
+        patch("apple_git.store.SQLiteStore") as MockStore,
+        patch("apple_git.reminders.RemindersClient") as _MockRemindersClient,
+        patch("apple_git.github.GitHubClient") as MockGitHubClient,
+        patch("apple_git.notes.NotesClient") as MockNotesClient,
+        patch("apple_git.connector.build_connector") as MockBuildConnector,
+        patch("apple_git.planner.IssuePlanner") as MockIssuePlanner,
+        patch("apple_git.issue_analyzer.IssueAnalyzer") as MockIssueAnalyzer,
+        patch("apple_git.reviewer.PRReviewer") as MockPRReviewer,
+        patch("apple_git.security_reviewer.SecurityReviewer") as MockSecurityReviewer,
         patch.object(mock_settings, 'repo_path', new_callable=MagicMock) as MockRepoPath,
-        patch("src.apple_git.github.GitHubClient._format_comment") as MockFormatComment,
+        patch("apple_git.github.GitHubClient._format_comment") as MockFormatComment,
     ):
         instance = AppleGit(mock_settings)
 
@@ -77,11 +80,13 @@ def apple_git_instance(mock_settings):
         instance.store = MockStore.return_value
         
         # Use separate mocks for each list to avoid cross-contamination
+        instance.reminders_issue_plan = MagicMock()
         instance.reminders_issue_ready = MagicMock()
         instance.reminders_review = MagicMock()
         instance.reminders_done = MagicMock()
         
         # Default fetch_all to empty
+        instance.reminders_issue_plan.fetch_all.return_value = []
         instance.reminders_issue_ready.fetch_all.return_value = []
         instance.reminders_review.fetch_all.return_value = []
         instance.reminders_done.fetch_all.return_value = []
@@ -91,6 +96,7 @@ def apple_git_instance(mock_settings):
         instance.connector = MockBuildConnector.return_value
         instance.connector.backend_name = "claude"
         
+        instance.issue_planner = MockIssuePlanner.return_value
         instance.issue_analyzer = MockIssueAnalyzer.return_value
         instance.pr_reviewer = MockPRReviewer.return_value
         instance.security_reviewer = MockSecurityReviewer.return_value
@@ -99,6 +105,9 @@ def apple_git_instance(mock_settings):
         instance.github_client.create_issue.return_value = MockGitHubIssue(1, "http://github.com/issue/1")
         instance.github_client.create_pr.return_value = MockGitHubPR(101, "http://github.com/pr/101")
         instance.github_client.get_pr.return_value = MockGitHubPR(101, "http://github.com/pr/101")
+        instance.github_client.get_default_branch.return_value = None
+        instance.github_client.upsert_issue_comment.return_value = True
+        instance.github_client.get_issue_comment_by_marker.return_value = "## Problem\nA plan"
         instance.github_client.ensure_branch.return_value = True
         instance.github_client.branch_has_commits_ahead.return_value = True
         instance.github_client.merge_pr.return_value = True
@@ -107,6 +116,7 @@ def apple_git_instance(mock_settings):
         instance.github_client.get_pr_diff_files.return_value = [
             {"filename": "file.py", "patch": "diff"}
         ]
+        instance.issue_planner.plan.return_value = "## Problem\nA plan"
         instance.issue_analyzer.analyze.return_value = "AI analysis"
         instance.pr_reviewer.review.return_value = "AI code review"
         instance.security_reviewer.review.return_value = "AI security review"
@@ -120,10 +130,10 @@ def apple_git_instance(mock_settings):
 
 
 @pytest.mark.asyncio
-async def test_process_create_issue(apple_git_instance):
-    """Test processing a reminder to create a new issue."""
-    reminder = MockReminder("rem1", "Test Issue", "Issue Body", "dev-issue-ready")
-    apple_git_instance.reminders_issue_ready.fetch_all.return_value = [reminder]
+async def test_process_issue_plan_creates_issue_and_posts_plan(apple_git_instance):
+    """Test processing a reminder in issue-plan creates an issue and canonical plan comment."""
+    reminder = MockReminder("rem1", "Test Issue", "Issue Body", "issue-plan")
+    apple_git_instance.reminders_issue_plan.fetch_all.return_value = [reminder]
     apple_git_instance.store.get_mapping_by_reminder_id.return_value = None  # No existing mapping
 
     apple_git_instance.process()
@@ -131,12 +141,17 @@ async def test_process_create_issue(apple_git_instance):
     apple_git_instance.github_client.create_issue.assert_called_once_with(
         reminder.name, reminder.body
     )
+    apple_git_instance.issue_planner.plan.assert_called_once()
+    apple_git_instance.github_client.upsert_issue_comment.assert_called_once()
     apple_git_instance.store.upsert_issue_mapping.assert_called_once()
-    apple_git_instance.reminders_issue_ready.update_body_tags.assert_called_once()
-    apple_git_instance.reminders_issue_ready.set_reminder_url.assert_called_once()
-    apple_git_instance.reminders_issue_ready.annotate_reminder.assert_called_once()
-    apple_git_instance.github_client.add_issue_comment.assert_called()  # Two comments: Picked Up, AI Analysis
-    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once()
+    apple_git_instance.connector.spawn.assert_not_called()
+    apple_git_instance.reminders_issue_plan.update_body_tags.assert_called_once()
+    apple_git_instance.reminders_issue_plan.set_reminder_url.assert_called_once()
+    apple_git_instance.reminders_issue_plan.annotate_reminder.assert_called_once()
+    apple_git_instance.github_client.add_issue_comment.assert_called()  # Picked Up, AI Analysis
+    apple_git_instance.reminders_issue_plan.update_status_line.assert_called_once_with(
+        "rem1", "📝 Plan ready — move to issue-ready to start coding"
+    )
     apple_git_instance.notes_client.log_event.assert_called_once_with(
         "issue_created",
         {
@@ -146,6 +161,44 @@ async def test_process_create_issue(apple_git_instance):
             "branch": "issue-1",
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_process_issue_plan_reports_planner_unavailable(apple_git_instance):
+    """Test that issue-plan does not start coding and reports when planning is unavailable."""
+    reminder = MockReminder("rem1", "Test Issue", "Issue Body", "issue-plan")
+    apple_git_instance.reminders_issue_plan.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = None
+    apple_git_instance.issue_planner = None
+
+    apple_git_instance.process()
+
+    apple_git_instance.connector.spawn.assert_not_called()
+    apple_git_instance.reminders_issue_plan.update_status_line.assert_called_once_with(
+        "rem1", "⚠️ planning unavailable — issue created but plan not generated"
+    )
+    apple_git_instance.github_client.upsert_issue_comment.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_issue_plan_regenerates_missing_plan_for_existing_mapping(apple_git_instance):
+    """Test that returning a mapped reminder to issue-plan regenerates the canonical plan if missing."""
+    reminder = MockReminder("rem1", "Test Issue", "Issue Body", "issue-plan")
+    apple_git_instance.reminders_issue_plan.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "issue-plan",
+        "reminder_title": "Test Issue",
+        "github_pr_number": None,
+    }
+    apple_git_instance.github_client.get_issue_comment_by_marker.return_value = ""
+
+    apple_git_instance.process()
+
+    apple_git_instance.issue_planner.plan.assert_called_once()
+    apple_git_instance.github_client.upsert_issue_comment.assert_called_once()
+    apple_git_instance.connector.spawn.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -165,7 +218,7 @@ async def test_process_handle_review_create_pr(apple_git_instance):
     apple_git_instance.process()
 
     apple_git_instance.github_client.create_pr.assert_called_once_with(
-        title=reminder.name, body=reminder.body, head=branch_name
+        title=reminder.name, body=reminder.body, head=branch_name, base="main"
     )
     apple_git_instance.store.update_pr_number.assert_called_once_with("rem1", 101)
     apple_git_instance.github_client.add_pr_comment.assert_called()  # For summary, code review, security review
@@ -178,6 +231,76 @@ async def test_process_handle_review_create_pr(apple_git_instance):
             "pr_number": "101",
             "url": "http://github.com/pr/101",
         },
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_issue_ready_starts_connector_from_existing_plan(apple_git_instance):
+    """Test that issue-ready starts code generation only when a mapping and plan already exist."""
+    reminder = MockReminder("rem1", "Test Issue", "Issue Body #branch:issue-1", "dev-issue-ready")
+    apple_git_instance.reminders_issue_ready.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "issue-plan",
+        "reminder_title": "Test Issue",
+        "github_pr_number": None,
+    }
+
+    apple_git_instance.process()
+
+    apple_git_instance.github_client.create_issue.assert_not_called()
+    apple_git_instance.github_client.get_issue_comment_by_marker.assert_called_once()
+    apple_git_instance.store.update_section.assert_called_once_with("rem1", "dev-issue-ready")
+    apple_git_instance.store.create_connector_run.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_process_issue_ready_requires_existing_plan_comment(apple_git_instance):
+    """Test that issue-ready blocks when the canonical plan comment is missing."""
+    reminder = MockReminder("rem1", "Test Issue", "Issue Body #branch:issue-1", "dev-issue-ready")
+    apple_git_instance.reminders_issue_ready.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "issue-plan",
+        "reminder_title": "Test Issue",
+        "github_pr_number": None,
+    }
+    apple_git_instance.github_client.get_issue_comment_by_marker.return_value = ""
+
+    apple_git_instance.process()
+
+    apple_git_instance.connector.spawn.assert_not_called()
+    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once_with(
+        "rem1", "⚠️ no approved plan found — move back to issue-plan"
+    )
+    apple_git_instance.store.create_connector_run.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_handle_review_uses_configured_base_branch(apple_git_instance):
+    """Test that review flow uses the configured base branch consistently."""
+    apple_git_instance.settings.github.base_branch = "develop"
+    branch_name = "issue-1"
+    reminder = MockReminder("rem1", "Test PR", f"#branch:{branch_name}", "dev-review")
+    apple_git_instance.reminders_review.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "dev-review",
+        "reminder_title": "Test PR",
+        "github_pr_number": None,
+    }
+
+    apple_git_instance.process()
+
+    apple_git_instance.github_client.ensure_branch.assert_called_once_with(branch_name, base="develop")
+    apple_git_instance.github_client.branch_has_commits_ahead.assert_called_once_with(
+        branch_name, base="develop"
+    )
+    apple_git_instance.github_client.create_pr.assert_called_once_with(
+        title=reminder.name, body=reminder.body, head=branch_name, base="develop"
     )
 
 
@@ -290,6 +413,57 @@ async def test_process_handle_done_merge_conflict(apple_git_instance):
 
 
 @pytest.mark.asyncio
+async def test_process_handle_done_requires_merge_tag_for_open_pr(apple_git_instance):
+    """Test that done state does not auto-merge or close when #merge is absent."""
+    reminder = MockReminder("rem1", "Manual Merge Needed", "", "dev-done")
+    apple_git_instance.reminders_done.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "dev-done",
+        "reminder_title": "Manual Merge Needed",
+        "github_pr_number": 101,
+    }
+    apple_git_instance.github_client.get_pr.return_value = MockGitHubPR(
+        101, "http://github.com/pr/101", merged=False
+    )
+
+    apple_git_instance.process()
+
+    apple_git_instance.github_client.merge_pr.assert_not_called()
+    apple_git_instance.github_client.close_issue.assert_not_called()
+    apple_git_instance.store.delete_mapping.assert_not_called()
+    apple_git_instance.reminders_done.complete_reminder.assert_not_called()
+    apple_git_instance.reminders_done.update_status_line.assert_called_once_with(
+        "rem1", "⏸️ PR open — merge manually or add #merge"
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_handle_done_closes_issue_when_pr_already_merged(apple_git_instance):
+    """Test that done state closes the issue when the PR is already merged."""
+    reminder = MockReminder("rem1", "Already Merged", "", "dev-done")
+    apple_git_instance.reminders_done.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "dev-done",
+        "reminder_title": "Already Merged",
+        "github_pr_number": 101,
+    }
+    apple_git_instance.github_client.get_pr.return_value = MockGitHubPR(
+        101, "http://github.com/pr/101", merged=True
+    )
+
+    apple_git_instance.process()
+
+    apple_git_instance.github_client.merge_pr.assert_not_called()
+    apple_git_instance.github_client.close_issue.assert_called_once_with(1)
+    apple_git_instance.store.delete_mapping.assert_called_once_with("rem1")
+    apple_git_instance.reminders_done.complete_reminder.assert_called_once_with("rem1")
+
+
+@pytest.mark.asyncio
 async def test_run_forever_shutdown(apple_git_instance):
     """Test that run_forever can be shut down gracefully."""
     # Simulate shutdown request after one loop
@@ -308,6 +482,10 @@ async def test_spawn_connector_not_available(apple_git_instance):
     apple_git_instance.connector.is_available.return_value = False
     apple_git_instance._spawn_connector(1, "title", "body", "branch", "rem1")
     apple_git_instance.connector.spawn.assert_not_called()
+    apple_git_instance.store.create_connector_run.assert_called_once()
+    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once_with(
+        "rem1", "⚠️ claude unavailable — issue created but worker not started"
+    )
 
 
 @pytest.mark.asyncio
@@ -320,6 +498,40 @@ async def test_spawn_connector_already_running(apple_git_instance):
 
     apple_git_instance._spawn_connector(1, "title", "body", "branch", "rem1")
     apple_git_instance.connector.spawn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_spawn_connector_prompt_uses_structured_codegen_template(apple_git_instance):
+    """Test that connector prompt uses the stricter structured codegen template."""
+    apple_git_instance.settings.github.base_branch = "develop"
+    mock_proc = MagicMock(spec=subprocess.Popen)
+    mock_proc.pid = 4321
+    apple_git_instance.connector.spawn.return_value = mock_proc
+
+    apple_git_instance._spawn_connector(1, "title", "body", "issue-1", "rem1")
+
+    prompt = apple_git_instance.connector.spawn.call_args.args[0]
+    assert "You are implementing the approved plan for GitHub issue #1." in prompt
+    assert "Branch:\nissue-1" in prompt
+    assert "Base branch:\ndevelop" in prompt
+    assert "If blocked, output exactly this format and nothing else:" in prompt
+    assert "## Commit message" in prompt
+
+
+def test_build_issue_plan_prompt_uses_structured_planning_template(apple_git_instance):
+    """Test that the issue planning prompt uses the stricter structured template."""
+    with patch("apple_git.__main__.tree.generate_tree", return_value="src/\n  app.py"):
+        prompt = apple_git_instance._build_issue_plan_prompt(
+            issue_number=7,
+            title="Add issue planning",
+            body="Need a planning phase before coding starts.",
+            repo_path=Path("/tmp/mock_repo"),
+        )
+
+    assert "You are preparing an implementation plan for GitHub issue #7." in prompt
+    assert "## Problem" in prompt
+    assert "## Ready for implementation" in prompt
+    assert '"Proposed changes" must contain 3-7 numbered steps.' in prompt
 
 
 @pytest.mark.asyncio

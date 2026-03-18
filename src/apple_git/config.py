@@ -18,10 +18,12 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 class GitHubSettings(BaseSettings):
     token: str = ""
     repo: str = ""
+    base_branch: str = ""
 
 
 class RemindersSettings(BaseSettings):
     list_inactive: str = "dev-backlog"
+    list_issue_plan: str = "issue-plan"
     list_issue_ready: str = "dev-issue-ready"
     list_review: str = "dev-review"
     list_done: str = "dev-done"
@@ -48,6 +50,7 @@ class AppleGitSettings(BaseSettings):
 
     db_path: Path = Path.home() / ".apple-git" / "apple_git.sqlite"
     log_file: Path = Path.home() / ".apple-git" / "apple-git.log"
+    connector_logs_dir: Path = Path.home() / ".apple-git" / "connector-runs"
     repo_path: Path = Path.home() / "Documents" / "GitHub" / "flow-healer"
 
     anthropic_api_key: str = ""
@@ -58,7 +61,7 @@ class AppleGitSettings(BaseSettings):
     connector_model: str = ""            # override default model for chosen backend
     connector_command: str = ""          # override CLI path if not on PATH
 
-    @field_validator("db_path", "log_file", mode="after")
+    @field_validator("db_path", "log_file", "connector_logs_dir", mode="after")
     @classmethod
     def _resolve_path(cls, v: Path) -> Path:
         if v.is_absolute():
@@ -115,6 +118,7 @@ class AppleGitSettings(BaseSettings):
         for key, env_var in {
             "db_path": "APPLE_GIT_DB_PATH",
             "log_file": "APPLE_GIT_LOG_FILE",
+            "connector_logs_dir": "APPLE_GIT_CONNECTOR_LOGS_DIR",
             "repo_path": "APPLE_GIT_REPO_PATH",
         }.items():
             val = os.environ.get(env_var)
@@ -128,6 +132,9 @@ class AppleGitSettings(BaseSettings):
             poll_interval_seconds=data.get("poll_interval_seconds", 5.0),
             db_path=Path(data.get("db_path", "~/.apple-git/apple_git.sqlite")).expanduser(),
             log_file=Path(data.get("log_file", "~/.apple-git/apple-git.log")).expanduser(),
+            connector_logs_dir=Path(
+                data.get("connector_logs_dir", "~/.apple-git/connector-runs")
+            ).expanduser(),
             repo_path=Path(data.get("repo_path", "~/Documents/GitHub/flow-healer")).expanduser(),
             connector_backend=data.get("connector_backend", "claude"),
             connector_model=data.get("connector_model", ""),

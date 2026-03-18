@@ -1,9 +1,11 @@
 github:
   token: ""
   repo: "your-username/your-repo"
+  base_branch: ""  # Optional override; defaults to the repo's default branch
 
 reminders:
   list_inactive: "dev-backlog"
+  list_issue_plan: "issue-plan"
   list_issue_ready: "dev-issue-ready"
   list_review: "dev-review"
   list_done: "dev-done"
@@ -17,6 +19,8 @@ poll_interval_seconds: 15.0
 db_path: ~/.apple-git/apple_git.sqlite
 
 log_file: ~/.apple-git/apple-git.log
+
+connector_logs_dir: ~/.apple-git/connector-runs
 
 repo_path: ~/Documents/GitHub/your-repo
 

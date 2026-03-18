@@ -5,7 +5,7 @@ import subprocess
 import time
 
 
-from src.apple_git.config import AppleGitSettings, get_settings
+from .config import AppleGitSettings, get_settings
 
 logger = logging.getLogger("apple_git.setup")
 
@@ -56,6 +56,7 @@ def setup_reminders_lists(settings: AppleGitSettings) -> None:
     logger.info("Setting up Apple Reminders lists...")
     lists_to_create = [
         settings.reminders.list_inactive,
+        settings.reminders.list_issue_plan,
         settings.reminders.list_issue_ready,
         settings.reminders.list_review,
         settings.reminders.list_done,

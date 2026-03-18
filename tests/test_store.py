@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from src.apple_git.store import SQLiteStore
+from apple_git.store import SQLiteStore
 
 
 @pytest.fixture
@@ -22,6 +22,8 @@ def test_bootstrap_creates_table(temp_db_store):
     conn = sqlite3.connect(temp_db_store.db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='issue_mappings';")
+    assert cursor.fetchone() is not None
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='connector_runs';")
     assert cursor.fetchone() is not None
     conn.close()
 
@@ -111,3 +113,34 @@ def test_upsert_updates_existing_mapping(temp_db_store):
     assert mapping["github_issue_number"] == github_issue_number_new
     assert mapping["section"] == section_new
     assert mapping["reminder_title"] == reminder_title_new
+
+
+def test_create_and_update_connector_run(temp_db_store):
+    """Test persisting connector run metadata and later updating terminal status."""
+    temp_db_store.create_connector_run(
+        run_id="run-1",
+        reminder_id="rem123",
+        github_issue_number=42,
+        backend="claude",
+        branch="issue-42",
+        status="running",
+        prompt_hash="abc123",
+        stdout_log_path="/tmp/run-1.stdout.log",
+        stderr_log_path="/tmp/run-1.stderr.log",
+    )
+
+    temp_db_store.update_connector_run(
+        "run-1",
+        status="failed",
+        pid=12345,
+        exit_code=2,
+        failure_reason="connector exited non-zero",
+    )
+
+    run = temp_db_store.get_connector_run("run-1")
+
+    assert run is not None
+    assert run["status"] == "failed"
+    assert run["pid"] == 12345
+    assert run["exit_code"] == 2
+    assert run["failure_reason"] == "connector exited non-zero"

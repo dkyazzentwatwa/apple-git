@@ -10,8 +10,8 @@
 
 - **Kanban Sync:** Seamless two-way synchronization between Apple Reminders lists and GitHub.
 - **Agentic Workflow:**
-  - **Auto-Issue Creation:** Moving a reminder to "Issue Ready" creates a GitHub issue.
-  - **AI Workers:** Spawns background AI agents (Claude, Codex, Kilo) to implement features in dedicated branches.
+  - **Plan First:** Moving a reminder to "Issue Plan" creates a GitHub issue and posts a structured implementation plan comment.
+  - **AI Workers:** Moving a reminder to "Issue Ready" starts background AI agents (Claude, Codex, Kilo) on the approved plan in a dedicated branch.
   - **Automated PRs:** Moving a reminder to "Review" triggers PR creation.
 - **AI Reviews:** Automatically analyzes issues and reviews Pull Requests using Anthropic's Claude (Code Review & Security Audit).
 - **Status Updates:** Real-time updates in Reminders (e.g., "🔄 Claude working on issue #42", "✅ PR Merged").
@@ -55,7 +55,7 @@
     ```
 
 2.  **Reminders App Setup:**
-    Create the necessary lists in Apple Reminders (e.g., `dev-backlog`, `dev-issue-ready`, `dev-review`, `dev-done`).
+    Create the necessary lists in Apple Reminders (e.g., `dev-backlog`, `issue-plan`, `dev-issue-ready`, `dev-review`, `dev-done`).
     *See [REMINDERS_SETUP.md](REMINDERS_SETUP.md) for a detailed walkthrough of the workflow and list setup.*
 
 3.  **Application Config (Optional):**
@@ -77,14 +77,16 @@ The tool will begin polling your Reminders lists. Check the console output or `~
 
 ### The Workflow
 
-1.  **Plan:** Add tasks to your **Backlog** list in Reminders.
-2.  **Activate:** Move a task to **Issue Ready**.
+1.  **Backlog:** Add tasks to your **Backlog** list in Reminders.
+2.  **Plan:** Move a task to **Issue Plan**.
     - `apple-git` creates a GitHub Issue.
-    - Spawns an AI agent to work on a new branch (e.g., `issue-123`).
-3.  **Review:** Move the task to **Review**.
+    - Posts a structured implementation plan comment.
+3.  **Activate:** Move the task to **Issue Ready**.
+    - `apple-git` starts an AI agent to work on a new branch (e.g., `issue-123`).
+4.  **Review:** Move the task to **Review**.
     - `apple-git` creates a Pull Request.
     - Triggers AI code and security reviews.
-4.  **Complete:** Move the task to **Done**.
+5.  **Complete:** Move the task to **Done**.
     - Merges the PR (if `#merge` tag is present).
     - Closes the GitHub Issue.
     - Marks the Reminder as completed.

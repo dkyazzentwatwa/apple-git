@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import subprocess
@@ -43,45 +44,41 @@ class RemindersClient:
         if resolved_list is None:
             return []
 
-        if resolved_list.get("id"):
-            escaped_list_id = resolved_list["id"].replace('"', '\\"')
-            list_selector = f'first list whose id is "{escaped_list_id}"'
-        else:
-            escaped_list_name = self.list_name.replace('"', '\\"')
-            list_selector = f'list "{escaped_list_name}"'
+        escaped_list_id = json.dumps(str(resolved_list.get("id", "")))
+        escaped_list_name = json.dumps(str(resolved_list.get("name", self.list_name)))
 
-        script = f'''
-        set text item delimiters to linefeed
-        tell {REMINDERS_APP_TARGET}
-            set taskList to {list_selector}
-            set rIds to id of every reminder of taskList
-            set rNames to name of every reminder of taskList
-            set rBodies to ""
-            set rUrls to ""
-            repeat with r in (every reminder of taskList)
-                try
-                    set b to body of r
-                    if b is missing value then set b to ""
-                    set rBodies to rBodies & b & "~~~"
-                on error
-                    set rBodies to rBodies & "~~~"
-                end try
-                try
-                    set u to url of r
-                    if u is missing value then set u to ""
-                    set rUrls to rUrls & u & "~~~"
-                on error
-                    set rUrls to rUrls & "~~~"
-                end try
-            end repeat
-            set rListName to name of taskList as text
-            return (rIds as text) & "|" & (rNames as text) & "|" & rBodies & "|" & rUrls & "|" & rListName
-        end tell
-        '''
+        script = f"""
+        const app = Application("Reminders");
+        let taskList = null;
+        const listId = {escaped_list_id};
+        const listName = {escaped_list_name};
+
+        if (listId) {{
+            const matches = app.lists.whose({{ id: listId }})();
+            if (matches.length > 0) {{
+                taskList = matches[0];
+            }}
+        }}
+
+        if (!taskList) {{
+            taskList = app.lists.byName(listName);
+        }}
+
+        const reminderListName = taskList.name();
+        const rows = taskList.reminders().map((r) => ({{
+            id: r.id(),
+            name: r.name(),
+            body: r.body() || "",
+            url: r.url() || "",
+            list_name: reminderListName,
+        }}));
+
+        JSON.stringify(rows);
+        """
 
         try:
             result = subprocess.run(
-                ["osascript", "-e", script],
+                ["osascript", "-l", "JavaScript", "-e", script],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -101,30 +98,29 @@ class RemindersClient:
             return []
 
     def _parse_output(self, output: str) -> list[Reminder]:
-        parts = output.strip().split("|")
-        if len(parts) < 3:
+        try:
+            rows = json.loads(output.strip() or "[]")
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse reminders JSON output")
+            return []
+        if not isinstance(rows, list):
             return []
 
-        ids = parts[0].splitlines()
-        names = parts[1].splitlines()
-        # Bodies and URLs use "~~~" delimiter to preserve multi-line content
-        raw_bodies = parts[2] if len(parts) > 2 else ""
-        bodies = raw_bodies.split("~~~")
-        raw_urls = parts[3] if len(parts) > 3 else ""
-        urls = raw_urls.split("~~~")
-        list_name = parts[4].strip() if len(parts) > 4 else ""
-
-        reminders = []
-        for i in range(len(ids)):
-            reminders.append(Reminder(
-                id=ids[i].strip(),
-                name=names[i].strip() if i < len(names) else "",
-                body=bodies[i].strip() if i < len(bodies) else "",
-                url=urls[i].strip() if i < len(urls) else "",
-                list_name=list_name,
-                creation_date="",
-                due_date="",
-            ))
+        reminders: list[Reminder] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            reminders.append(
+                Reminder(
+                    id=str(row.get("id", "")).strip(),
+                    name=str(row.get("name", "")).strip(),
+                    body=str(row.get("body", "")),
+                    url=str(row.get("url", "")),
+                    list_name=str(row.get("list_name", "")).strip(),
+                    creation_date="",
+                    due_date="",
+                )
+            )
         return reminders
 
     def complete_reminder(self, reminder_id: str) -> bool:

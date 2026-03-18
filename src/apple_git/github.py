@@ -35,6 +35,7 @@ class GitHubClient:
         self.repo_name = repo
         self._client = Github(token) if token else None
         self._repo = None
+        self._default_branch: str | None = None
 
     @property
     def repo(self):
@@ -44,6 +45,19 @@ class GitHubClient:
             except Exception as exc:
                 logger.error("Failed to get repo %s: %s", self.repo_name, exc)
         return self._repo
+
+    def get_default_branch(self) -> str | None:
+        if self._default_branch:
+            return self._default_branch
+        repo = self.repo
+        if not repo:
+            return None
+        try:
+            self._default_branch = str(repo.default_branch or "").strip() or None
+            return self._default_branch
+        except Exception as exc:
+            logger.warning("Failed to get default branch for %s: %s", self.repo_name, exc)
+            return None
 
     @staticmethod
     def _format_comment(heading: str, bullets: list[str], intro: str = "", outro: str = "") -> str:
@@ -207,6 +221,45 @@ class GitHubClient:
             return True
         except Exception as exc:
             logger.warning("Failed to comment on issue #%d: %s", issue_number, exc)
+            return False
+
+    def get_issue_comment_by_marker(self, issue_number: int, marker: str) -> str:
+        if not self.repo:
+            return ""
+        try:
+            issue = self.repo.get_issue(issue_number)
+            for comment in issue.get_comments():
+                body = comment.body or ""
+                if marker in body:
+                    return body
+        except Exception as exc:
+            logger.warning(
+                "Failed to get issue comment for issue #%d with marker %r: %s",
+                issue_number,
+                marker,
+                exc,
+            )
+        return ""
+
+    def upsert_issue_comment(self, issue_number: int, body: str, marker: str) -> bool:
+        if not self.repo:
+            return False
+        try:
+            issue = self.repo.get_issue(issue_number)
+            for comment in issue.get_comments():
+                existing_body = comment.body or ""
+                if marker in existing_body:
+                    comment.edit(body)
+                    return True
+            issue.create_comment(body)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Failed to upsert issue comment for issue #%d with marker %r: %s",
+                issue_number,
+                marker,
+                exc,
+            )
             return False
 
     def add_pr_comment(self, pr_number: int, body: str) -> bool:

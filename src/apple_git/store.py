@@ -57,8 +57,26 @@ class SQLiteStore:
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
+                CREATE TABLE IF NOT EXISTS connector_runs (
+                    run_id TEXT PRIMARY KEY,
+                    reminder_id TEXT NOT NULL,
+                    github_issue_number INTEGER NOT NULL,
+                    backend TEXT NOT NULL,
+                    branch TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    prompt_hash TEXT NOT NULL,
+                    stdout_log_path TEXT NOT NULL,
+                    stderr_log_path TEXT NOT NULL,
+                    pid INTEGER,
+                    exit_code INTEGER,
+                    failure_reason TEXT NOT NULL DEFAULT '',
+                    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    finished_at TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_issue_mappings_issue ON issue_mappings(github_issue_number);
                 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+                CREATE INDEX IF NOT EXISTS idx_connector_runs_issue ON connector_runs(github_issue_number);
                 """
             )
             conn.commit()
@@ -186,3 +204,79 @@ class SQLiteStore:
                     data["payload"] = {}
                 events.append(data)
             return events
+
+    def create_connector_run(
+        self,
+        *,
+        run_id: str,
+        reminder_id: str,
+        github_issue_number: int,
+        backend: str,
+        branch: str,
+        status: str,
+        prompt_hash: str,
+        stdout_log_path: str,
+        stderr_log_path: str,
+    ) -> None:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                INSERT INTO connector_runs(
+                    run_id, reminder_id, github_issue_number, backend, branch,
+                    status, prompt_hash, stdout_log_path, stderr_log_path
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    reminder_id,
+                    github_issue_number,
+                    backend,
+                    branch,
+                    status,
+                    prompt_hash,
+                    stdout_log_path,
+                    stderr_log_path,
+                ),
+            )
+            conn.commit()
+
+    def update_connector_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        pid: int | None = None,
+        exit_code: int | None = None,
+        failure_reason: str | None = None,
+    ) -> bool:
+        conn = self._connect()
+        terminal = status not in {"pending", "starting", "running"}
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE connector_runs
+                SET status = ?,
+                    pid = COALESCE(?, pid),
+                    exit_code = COALESCE(?, exit_code),
+                    failure_reason = COALESCE(?, failure_reason),
+                    finished_at = CASE
+                        WHEN ? THEN CURRENT_TIMESTAMP
+                        ELSE finished_at
+                    END
+                WHERE run_id = ?
+                """,
+                (status, pid, exit_code, failure_reason, terminal, run_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_connector_run(self, run_id: str) -> dict[str, Any] | None:
+        conn = self._connect()
+        with self._lock:
+            row = conn.execute(
+                "SELECT * FROM connector_runs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            return self._row_to_dict(row)

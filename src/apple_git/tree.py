@@ -27,7 +27,7 @@ def generate_tree(root: Path, max_depth: int = 2, max_files: int = 60) -> str:
                 list(path.iterdir()),
                 key=lambda e: (not e.is_dir(), e.name.lower())
             )
-        except PermissionError:
+        except (FileNotFoundError, PermissionError):
             return
 
         filtered = [

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
 
-from src.apple_git.tree import generate_tree
+from apple_git.tree import generate_tree
 
 
 def test_generate_tree_basic(tmp_path):
@@ -91,3 +92,9 @@ def test_generate_tree_single_file(tmp_path):
     expected_tree = f"""{tmp_path.name}/
 └── single_file.txt"""
     assert generate_tree(tmp_path) == expected_tree
+
+
+def test_generate_tree_missing_path():
+    """Test tree generation handles a missing root path gracefully."""
+    missing = Path("/tmp/definitely-missing-apple-git-tree")
+    assert generate_tree(missing) == "definitely-missing-apple-git-tree/"

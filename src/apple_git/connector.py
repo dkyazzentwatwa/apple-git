@@ -7,14 +7,21 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import IO, Protocol, runtime_checkable
 
 logger = logging.getLogger("apple_git.connector")
 
 
 @runtime_checkable
 class ConnectorProtocol(Protocol):
-    def spawn(self, prompt: str, cwd: Path) -> subprocess.Popen: ...
+    def spawn(
+        self,
+        prompt: str,
+        cwd: Path,
+        *,
+        stdout: IO[bytes] | None = None,
+        stderr: IO[bytes] | None = None,
+    ) -> subprocess.Popen: ...
     def is_available(self) -> bool: ...
     @property
     def backend_name(self) -> str: ...
@@ -51,7 +58,14 @@ class ClaudeCliConnector:
         with self._lock:
             return self._available
 
-    def spawn(self, prompt: str, cwd: Path) -> subprocess.Popen:
+    def spawn(
+        self,
+        prompt: str,
+        cwd: Path,
+        *,
+        stdout: IO[bytes] | None = None,
+        stderr: IO[bytes] | None = None,
+    ) -> subprocess.Popen:
         with self._lock:
             resolved = self._resolved
         if not resolved:
@@ -62,7 +76,13 @@ class ClaudeCliConnector:
         if self.model:
             cmd.extend(["--model", self.model])
         cmd.extend(["-p", prompt])
-        return subprocess.Popen(cmd, cwd=str(cwd), start_new_session=True)
+        return subprocess.Popen(
+            cmd,
+            cwd=str(cwd),
+            start_new_session=True,
+            stdout=stdout,
+            stderr=stderr,
+        )
 
     def _resolve(self) -> None:
         resolved = shutil.which(self.command) or ""
@@ -105,7 +125,14 @@ class CodexCliConnector:
         with self._lock:
             return self._available
 
-    def spawn(self, prompt: str, cwd: Path) -> subprocess.Popen:
+    def spawn(
+        self,
+        prompt: str,
+        cwd: Path,
+        *,
+        stdout: IO[bytes] | None = None,
+        stderr: IO[bytes] | None = None,
+    ) -> subprocess.Popen:
         with self._lock:
             resolved = self._resolved
         if not resolved:
@@ -120,6 +147,8 @@ class CodexCliConnector:
             stdin=subprocess.PIPE,
             cwd=str(cwd),
             start_new_session=True,
+            stdout=stdout,
+            stderr=stderr,
         )
         if proc.stdin:
             try:
@@ -168,7 +197,14 @@ class KiloCliConnector:
         with self._lock:
             return self._available
 
-    def spawn(self, prompt: str, cwd: Path) -> subprocess.Popen:
+    def spawn(
+        self,
+        prompt: str,
+        cwd: Path,
+        *,
+        stdout: IO[bytes] | None = None,
+        stderr: IO[bytes] | None = None,
+    ) -> subprocess.Popen:
         with self._lock:
             resolved = self._resolved
         if not resolved:
@@ -181,6 +217,8 @@ class KiloCliConnector:
             stdin=subprocess.PIPE,
             cwd=str(cwd),
             start_new_session=True,
+            stdout=stdout,
+            stderr=stderr,
         )
         if proc.stdin:
             try:
