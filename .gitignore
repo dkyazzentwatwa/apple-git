@@ -85,8 +85,7 @@ temp/
 Thumbs.db
 .DS_Store
 
-# Test scripts (temporary debugging)
-test_*.py
+
 
 # Pycache
 .pytest_cache/

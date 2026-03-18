@@ -94,6 +94,9 @@ class AppleGitSettings(BaseSettings):
             connector_backend=data.get("connector_backend", "claude"),
             connector_model=data.get("connector_model", ""),
             connector_command=data.get("connector_command", ""),
+            anthropic_api_key=data.get("anthropic_api_key", ""),
+            enable_pr_review=data.get("enable_pr_review", True),
+            enable_security_review=data.get("enable_security_review", True),
         )
 
 
