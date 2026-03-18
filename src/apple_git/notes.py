@@ -11,12 +11,35 @@ class NotesClient:
     def __init__(self, folder_name: str = "apple-git-logs"):
         self.folder_name = folder_name
 
+    def _format_html(self, event_type: str, details: dict, timestamp: str) -> str:
+        colors = {
+            "issue_created": "#0075ca",
+            "pr_created": "#6f42c1",
+            "pr_merged": "#1a7f37",
+            "issue_closed": "#1a7f37",
+            "pr_linked": "#6f42c1",
+            "claude_finished": "#1a7f37",
+            "claude_error": "#cf222e",
+        }
+        color = colors.get(event_type, "#555555")
+        label = event_type.replace("_", " ").title()
+
+        rows = ""
+        for key, value in details.items():
+            display = f'<a href="{value}">{value}</a>' if str(value).startswith("http") else value
+            rows += f'<tr><td style="color:#666;padding-right:12px"><b>{key}</b></td><td>{display}</td></tr>'
+
+        return (
+            f'<h2 style="color:{color};margin-bottom:4px">{label}</h2>'
+            f'<p style="color:#999;font-size:12px;margin-top:0">{timestamp}</p>'
+            f'<table style="border-collapse:collapse;font-size:14px">{rows}</table>'
+        )
+
     def create_note(self, title: str, body: str) -> bool:
         def _esc(text: str) -> str:
             return (
                 text.replace("\\", "\\\\")
                 .replace('"', '\\"')
-                .replace("\n", "\\n")
                 .replace("\r", "")
             )
 
@@ -68,10 +91,5 @@ class NotesClient:
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         title = f"[{event_type}] {now_str}"
-
-        lines = [f"**Event:** {event_type}", f"**Time:** {now_str}", ""]
-        for key, value in details.items():
-            lines.append(f"**{key}:** {value}")
-
-        body = "\n".join(lines)
+        body = self._format_html(event_type, details, now_str)
         return self.create_note(title, body)

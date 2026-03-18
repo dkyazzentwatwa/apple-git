@@ -5,8 +5,6 @@ import re
 from dataclasses import dataclass
 
 from github import Github
-from github.Issue import Issue
-from github.PullRequest import PullRequest
 
 logger = logging.getLogger("apple_git.github")
 
@@ -45,6 +43,18 @@ class GitHubClient:
             except Exception as exc:
                 logger.error("Failed to get repo %s: %s", self.repo_name, exc)
         return self._repo
+
+    @staticmethod
+    def _format_comment(heading: str, bullets: list[str], intro: str = "", outro: str = "") -> str:
+        """Format a structured comment with heading, bullets, and footer."""
+        lines = [f"### {heading}", ""]
+        if intro:
+            lines += [intro.strip(), ""]
+        lines += [f"- {b}" for b in bullets if b.strip()]
+        if outro:
+            lines += ["", outro.strip()]
+        lines += ["", "— apple-git 🤖"]
+        return "\n".join(lines)
 
     def create_issue(self, title: str, body: str = "") -> GitHubIssue | None:
         if not self.repo:
@@ -186,6 +196,82 @@ class GitHubClient:
         except Exception as exc:
             logger.error("Failed to get PR #%d: %s", pr_number, exc)
             return None
+
+
+    def add_issue_comment(self, issue_number: int, body: str) -> bool:
+        try:
+            self.repo.get_issue(issue_number).create_comment(body)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to comment on issue #%d: %s", issue_number, exc)
+            return False
+
+    def add_pr_comment(self, pr_number: int, body: str) -> bool:
+        try:
+            self.repo.get_issue(pr_number).create_comment(body)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to comment on PR #%d: %s", pr_number, exc)
+            return False
+
+    def delete_branch(self, branch_name: str) -> bool:
+        if not self.repo:
+            return False
+
+        try:
+            self.repo.get_git_ref(f"heads/{branch_name}").delete()
+            logger.info("Deleted branch %s", branch_name)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to delete branch %s: %s", branch_name, exc)
+            return False
+
+    def get_commits_on_branch(self, branch_name: str, base: str = "main") -> list[str]:
+        """Get commit messages on branch that aren't in base. Returns list of commit messages."""
+        if not self.repo:
+            return []
+        try:
+            comparison = self.repo.compare(base, branch_name)
+            return [commit.commit.message.split("\n")[0] for commit in comparison.commits]
+        except Exception as exc:
+            logger.warning("Failed to get commits for %s: %s", branch_name, exc)
+            return []
+
+    def get_pr_diff_files(self, pr_number: int) -> list[dict]:
+        """Return list of {filename, patch} dicts for all changed files in the PR."""
+        if not self.repo:
+            return []
+        try:
+            pr = self.repo.get_pull(pr_number)
+            return [
+                {"filename": f.filename, "patch": f.patch or ""}
+                for f in pr.get_files()
+            ]
+        except Exception as exc:
+            logger.warning("Failed to get PR diff files for #%d: %s", pr_number, exc)
+            return []
+
+    def delete_branches_matching(self, pattern: str) -> int:
+        """Delete all branches matching pattern (e.g., 'issue-*'). Returns count deleted."""
+        if not self.repo:
+            return 0
+
+        count = 0
+        try:
+            for branch in self.repo.get_branches():
+                import fnmatch
+                if fnmatch.fnmatch(branch.name, pattern):
+                    try:
+                        self.repo.get_git_ref(f"heads/{branch.name}").delete()
+                        logger.info("Deleted branch %s", branch.name)
+                        count += 1
+                    except Exception as exc:
+                        logger.warning("Failed to delete branch %s: %s", branch.name, exc)
+            logger.info("Deleted %d branches matching %s", count, pattern)
+            return count
+        except Exception as exc:
+            logger.error("Failed to list branches: %s", exc)
+            return 0
 
 
 def extract_pr_number(text: str) -> int | None:

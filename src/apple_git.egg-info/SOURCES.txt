@@ -5,8 +5,11 @@ src/apple_git/__main__.py
 src/apple_git/apple_tools.py
 src/apple_git/config.py
 src/apple_git/github.py
+src/apple_git/issue_analyzer.py
 src/apple_git/notes.py
 src/apple_git/reminders.py
+src/apple_git/reviewer.py
+src/apple_git/security_reviewer.py
 src/apple_git/store.py
 src/apple_git.egg-info/PKG-INFO
 src/apple_git.egg-info/SOURCES.txt

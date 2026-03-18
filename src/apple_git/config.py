@@ -45,11 +45,19 @@ class AppleGitSettings(BaseSettings):
     reminders: RemindersSettings = Field(default_factory=RemindersSettings)
     notes: NotesSettings = Field(default_factory=NotesSettings)
 
-    poll_interval_seconds: float = 5.0
+    poll_interval_seconds: float = 15.0
 
     db_path: Path = Path.home() / ".apple-git" / "apple_git.sqlite"
     log_file: Path = Path.home() / ".apple-git" / "apple-git.log"
     repo_path: Path = Path.home() / "Documents" / "GitHub" / "flow-healer"
+
+    anthropic_api_key: str = ""
+    enable_pr_review: bool = True
+    enable_security_review: bool = True
+
+    connector_backend: str = "claude"   # claude | codex | kilo
+    connector_model: str = ""            # override default model for chosen backend
+    connector_command: str = ""          # override CLI path if not on PATH
 
     @field_validator("db_path", "log_file", mode="after")
     @classmethod
@@ -83,6 +91,9 @@ class AppleGitSettings(BaseSettings):
             db_path=Path(data.get("db_path", "~/.apple-git/apple_git.sqlite")).expanduser(),
             log_file=Path(data.get("log_file", "~/.apple-git/apple-git.log")).expanduser(),
             repo_path=Path(data.get("repo_path", "~/Documents/GitHub/flow-healer")).expanduser(),
+            connector_backend=data.get("connector_backend", "claude"),
+            connector_model=data.get("connector_model", ""),
+            connector_command=data.get("connector_command", ""),
         )
 
 

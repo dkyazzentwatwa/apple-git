@@ -269,6 +269,62 @@ class RemindersClient:
             return False
 
 
+    def update_status_line(self, reminder_id: str, status: str) -> bool:
+        resolved_list = self._resolve_list_selector()
+        if resolved_list is None:
+            return False
+
+        if resolved_list.get("id"):
+            escaped_list_id = resolved_list["id"].replace('"', '\\"')
+            target_list_clause = f'set taskList to first list whose id is "{escaped_list_id}"'
+        else:
+            escaped_list_name = resolved_list["name"].replace('"', '\\"')
+            target_list_clause = f'set taskList to list "{escaped_list_name}"'
+
+        escaped_id = reminder_id.replace('"', '\\"')
+        escaped_status = status.replace("\\", "\\\\").replace('"', '\\"')
+
+        script = f'''
+        tell {REMINDERS_APP_TARGET}
+            try
+                {target_list_clause}
+                set matchedReminder to (first reminder of taskList whose id is "{escaped_id}")
+                set existingBody to body of matchedReminder
+                if existingBody is missing value then set existingBody to ""
+                set newLines to {{}}
+                set oldLines to paragraphs of existingBody
+                repeat with aLine in oldLines
+                    if aLine does not start with "Status:" then
+                        set end of newLines to aLine as text
+                    end if
+                end repeat
+                set AppleScript's text item delimiters to linefeed
+                set filteredBody to newLines as text
+                set AppleScript's text item delimiters to ""
+                if filteredBody is "" then
+                    set body of matchedReminder to "Status: {escaped_status}"
+                else
+                    set body of matchedReminder to "Status: {escaped_status}" & linefeed & filteredBody
+                end if
+                return "ok"
+            on error errMsg
+                return "error: " & errMsg
+            end try
+        end tell
+        '''
+
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            return result.returncode == 0 and "ok" in result.stdout
+        except Exception as exc:
+            logger.warning("Error updating status line: %s", exc)
+            return False
+
     def set_reminder_url(self, reminder_id: str, url: str) -> bool:
         resolved_list = self._resolve_list_selector()
         if resolved_list is None:

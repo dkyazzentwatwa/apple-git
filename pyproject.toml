@@ -21,6 +21,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "anthropic>=0.26.0",
     "PyGithub>=1.59.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.3.0",

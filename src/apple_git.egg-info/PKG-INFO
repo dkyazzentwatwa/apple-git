@@ -13,6 +13,7 @@ Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
+Requires-Dist: anthropic>=0.26.0
 Requires-Dist: PyGithub>=1.59.0
 Requires-Dist: pydantic>=2.8.0
 Requires-Dist: pydantic-settings>=2.3.0
