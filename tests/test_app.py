@@ -202,6 +202,63 @@ async def test_process_issue_plan_regenerates_missing_plan_for_existing_mapping(
 
 
 @pytest.mark.asyncio
+async def test_process_issue_plan_regenerates_when_regen_tag_present(apple_git_instance):
+    """Test that #regen-plan forces a plan refresh for an existing mapped issue."""
+    reminder = MockReminder(
+        "rem1",
+        "Test Issue",
+        "Please tighten scope\n#regen-plan #branch:issue-1",
+        "issue-plan",
+    )
+    apple_git_instance.reminders_issue_plan.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "issue-plan",
+        "reminder_title": "Test Issue",
+        "github_pr_number": None,
+    }
+
+    apple_git_instance.process()
+
+    apple_git_instance.issue_planner.plan.assert_called_once()
+    prompt = apple_git_instance.issue_planner.plan.call_args.kwargs["prompt"]
+    assert "Operator feedback:\nPlease tighten scope" in prompt
+    assert "#regen-plan" not in prompt
+    assert "#branch:issue-1" not in prompt
+    apple_git_instance.github_client.upsert_issue_comment.assert_called_once()
+    apple_git_instance.reminders_issue_plan.update_body_tags.assert_called_once_with(
+        "rem1", "#regen-plan", ""
+    )
+    apple_git_instance.reminders_issue_plan.update_status_line.assert_called_once_with(
+        "rem1", "📝 Plan regenerated — review and move to issue-ready when approved"
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_issue_plan_preserves_regen_tag_when_regeneration_fails(apple_git_instance):
+    """Test that #regen-plan remains until a regeneration succeeds."""
+    reminder = MockReminder("rem1", "Test Issue", "#regen-plan", "issue-plan")
+    apple_git_instance.reminders_issue_plan.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "issue-plan",
+        "reminder_title": "Test Issue",
+        "github_pr_number": None,
+    }
+    apple_git_instance.issue_planner.plan.return_value = ""
+
+    apple_git_instance.process()
+
+    apple_git_instance.github_client.upsert_issue_comment.assert_not_called()
+    apple_git_instance.reminders_issue_plan.update_body_tags.assert_not_called()
+    apple_git_instance.reminders_issue_plan.update_status_line.assert_called_once_with(
+        "rem1", "⚠️ plan regeneration failed — fix feedback and try again"
+    )
+
+
+@pytest.mark.asyncio
 async def test_process_handle_review_create_pr(apple_git_instance):
     """Test processing a reminder to create a new PR."""
     branch_name = "issue-1"

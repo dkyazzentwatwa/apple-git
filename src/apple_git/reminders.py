@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("apple_git.reminders")
 REMINDERS_APP_TARGET = 'application id "com.apple.reminders"'
+COMMAND_TAG_PATTERN = re.compile(r"#[\w:-]+")
 
 
 @dataclass
@@ -386,3 +387,22 @@ def extract_pr_number(text: str) -> int | None:
 
 def has_merge_tag(text: str) -> bool:
     return "#merge" in text.lower()
+
+
+def has_tag(text: str, tag: str) -> bool:
+    return tag.lower() in text.lower().split()
+
+
+def strip_tag(text: str, tag: str) -> str:
+    parts = text.split()
+    filtered = [part for part in parts if part.lower() != tag.lower()]
+    return " ".join(filtered).strip()
+
+
+def extract_operator_feedback(text: str) -> str:
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        cleaned_line = COMMAND_TAG_PATTERN.sub("", raw_line).strip()
+        if cleaned_line and not cleaned_line.startswith("Status:"):
+            lines.append(cleaned_line)
+    return "\n".join(lines).strip()

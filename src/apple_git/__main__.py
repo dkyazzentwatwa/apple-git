@@ -104,9 +104,16 @@ class AppleGit:
         title: str,
         body: str,
         repo_path: Path,
+        operator_feedback: str = "",
     ) -> str:
         file_tree = tree.generate_tree(repo_path)
-        body_block = body.strip() or "(no issue body provided)"
+        sanitized_body = reminders.extract_operator_feedback(body)
+        body_block = sanitized_body or body.strip() or "(no issue body provided)"
+        feedback_block = (
+            f"\nOperator feedback:\n{operator_feedback.strip()}\n"
+            if operator_feedback.strip()
+            else ""
+        )
         return f"""You are preparing an implementation plan for GitHub issue #{issue_number}.
 
 Issue title:
@@ -114,11 +121,12 @@ Issue title:
 
 Issue body:
 {body_block}
+{feedback_block}
 
 Repository context:
 {file_tree}
 
-Use only the issue title, issue body, and repository context provided above. Do not assume unstated product requirements. Do not invent scope. Prefer the smallest viable change set.
+Use only the issue title, issue body, operator feedback, and repository context provided above. Do not assume unstated product requirements. Do not invent scope. Prefer the smallest viable change set.
 
 Return exactly these sections and nothing else:
 
@@ -354,7 +362,13 @@ Output requirements:
             f"{plan_text.strip()}"
         )
 
-    def _generate_issue_plan_comment(self, issue_number: int, rem: reminders.Reminder) -> bool:
+    def _generate_issue_plan_comment(
+        self,
+        issue_number: int,
+        rem: reminders.Reminder,
+        *,
+        operator_feedback: str = "",
+    ) -> bool:
         if not self.issue_planner or not self.github_client:
             return False
 
@@ -363,6 +377,7 @@ Output requirements:
             title=rem.name,
             body=rem.body,
             repo_path=self.settings.repo_path,
+            operator_feedback=operator_feedback,
         )
         plan_text = self.issue_planner.plan(prompt=plan_prompt)
         if not plan_text:
@@ -436,6 +451,23 @@ Output requirements:
         issue_number = mapping.get("github_issue_number")
         if not issue_number:
             return
+        if reminders.has_tag(rem.body, "#regen-plan"):
+            operator_feedback = reminders.extract_operator_feedback(rem.body)
+            if self._generate_issue_plan_comment(
+                issue_number,
+                rem,
+                operator_feedback=operator_feedback,
+            ):
+                self.reminders_issue_plan.update_body_tags(rem.id, "#regen-plan", "")
+                self.reminders_issue_plan.update_status_line(
+                    rem.id, "📝 Plan regenerated — review and move to issue-ready when approved"
+                )
+            else:
+                self.reminders_issue_plan.update_status_line(
+                    rem.id, "⚠️ plan regeneration failed — fix feedback and try again"
+                )
+            return
+
         existing_plan = self.github_client.get_issue_comment_by_marker(issue_number, PLAN_COMMENT_MARKER)
         if existing_plan.strip():
             return

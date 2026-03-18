@@ -39,6 +39,8 @@ reminders:
 
 The reminder stays in `issue-plan` until you approve the plan.
 
+If you want `apple-git` to regenerate the plan for the existing issue, leave the reminder in `issue-plan` and add `#regen-plan` to the reminder body. Any non-tag text in the reminder body is treated as operator feedback for the next planning pass. On success, `apple-git` updates the canonical plan comment in place and removes `#regen-plan`.
+
 ### Code Generation
 
 1. Review the generated plan on the GitHub issue.

@@ -81,6 +81,7 @@ The tool will begin polling your Reminders lists. Check the console output or `~
 2.  **Plan:** Move a task to **Issue Plan**.
     - `apple-git` creates a GitHub Issue.
     - Posts a structured implementation plan comment.
+    - If you want a revised plan, add `#regen-plan` plus optional feedback text to the reminder body while it stays in **Issue Plan**.
 3.  **Activate:** Move the task to **Issue Ready**.
     - `apple-git` starts an AI agent to work on a new branch (e.g., `issue-123`).
 4.  **Review:** Move the task to **Review**.
