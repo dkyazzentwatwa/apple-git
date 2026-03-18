@@ -15,6 +15,7 @@ from . import (
     reviewer,
     security_reviewer,
     store,
+    tree,
 )
 from .config import AppleGitSettings, get_settings
 
@@ -139,8 +140,8 @@ class AppleGit:
                 continue
             mapping = self.store.get_mapping_by_reminder_id(rem.id)
             if mapping:
-                self._handle_done(rem, mapping)
-                self.store.delete_mapping(rem.id)
+                if self._handle_done(rem, mapping): # Check return value
+                    self.store.delete_mapping(rem.id)
             else:
                 # No mapping means already processed in a previous run — just complete it
                 logger.debug("Reminder %s in done list with no mapping (already processed) — completing", rem.id)
@@ -204,15 +205,21 @@ class AppleGit:
             logger.error("Connector '%s' is not available — is the CLI installed and on PATH?", self.connector.backend_name)
             return
 
-        prompt = (
-            f"Work on GitHub issue #{issue_number}: {title}\n\n"
-            f"{body}\n\n"
-            f"Steps:\n"
-            f"1. git checkout {branch} (or git checkout -b {branch} main if it doesn't exist locally)\n"
-            f"2. Implement the changes required by the issue\n"
-            f"3. git add and git commit with a message referencing issue #{issue_number}\n"
-            f"4. git push origin {branch}"
-        )
+        # Generate a concise file tree to give the agent context
+        file_tree = tree.generate_tree(repo_path)
+        
+        prompt = f"""Work on GitHub issue #{issue_number}: {title}
+
+{body}
+
+Repository Structure:
+{file_tree}
+
+Steps:
+1. git checkout {branch} (or git checkout -b {branch} main if it doesn't exist locally)
+2. Implement the changes required by the issue
+3. git add and git commit with a message referencing issue #{issue_number}
+4. git push origin {branch}"""
 
         # Don't spawn a second process if one is already running for this issue
         existing = self._claude_procs.get(issue_number)
@@ -266,7 +273,10 @@ class AppleGit:
                 # Add summary of commits to PR
                 commits = self.github_client.get_commits_on_branch(branch)
                 if commits:
-                    summary = "## Changes\n\n" + "\n".join(f"- {msg}" for msg in commits)
+                    summary = "## Changes
+
+" + "
+".join(f"- {msg}" for msg in commits)
                     self.github_client.add_pr_comment(pr.number, summary)
 
                 # Add AI-generated reviews if configured
@@ -326,10 +336,11 @@ class AppleGit:
                 "reason": "no #branch: tag and no PR URL",
             })
 
-    def _handle_done(self, rem: reminders.Reminder, mapping: dict) -> None:
+    def _handle_done(self, rem: reminders.Reminder, mapping: dict) -> bool:
         pr_number = mapping.get("github_pr_number")
         issue_number = mapping.get("github_issue_number")
 
+        merge_successful = False
         if pr_number and self.github_client:
             if self.github_client.merge_pr(pr_number):
                 pr = self.github_client.get_pr(pr_number)
@@ -339,10 +350,9 @@ class AppleGit:
                 if issue_number:
                     comment = github.GitHubClient._format_comment(
                         "PR Merged",
-                        [f"PR #{pr_number} merged"],
+                        [f"PR #{pr.number} merged"],
                     )
                     self.github_client.add_issue_comment(issue_number, comment)
-                    # Delete branch after successful merge
                     branch_name = f"issue-{issue_number}"
                     self.github_client.delete_branch(branch_name)
                 if self.notes_client:
@@ -351,6 +361,26 @@ class AppleGit:
                         "pr_number": str(pr_number),
                     })
                 logger.info("Merged PR #%d", pr_number)
+                merge_successful = True
+            else:
+                logger.warning("Failed to merge PR #%d — moving back to review", pr_number)
+                if issue_number:
+                    comment = github.GitHubClient._format_comment(
+                        "Merge Failed",
+                        ["Automatic merge failed — likely conflicts", "Please resolve manually"],
+                    )
+                    self.github_client.add_issue_comment(issue_number, comment)
+                
+                self.reminders_done.update_status_line(rem.id, "⚠️ Merge Conflict — Fix manually")
+                if self.notes_client:
+                    self.notes_client.log_event("merge_failed", {
+                        "reminder": rem.name,
+                        "pr_number": str(pr_number),
+                        "reason": "conflict",
+                    })
+                return False # Merge failed, do not mark as fully handled
+        else: # No PR, but potentially an issue to close
+            merge_successful = True # Nothing to merge, so 'merge' part is successful in its absence.
 
         if issue_number and self.github_client:
             self.github_client.close_issue(issue_number)
@@ -360,6 +390,9 @@ class AppleGit:
                     "issue_number": str(issue_number),
                 })
             logger.info("Closed issue #%d", issue_number)
+            return True # Fully handled
+        
+        return merge_successful # Return if merge was successful, or if there was no PR to merge.
 
     async def run_forever(self) -> None:
         logger.info("Starting apple-git polling loop (interval=%.1fs)", self.settings.poll_interval_seconds)

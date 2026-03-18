@@ -3,6 +3,7 @@
 .env.local
 *.config.yaml
 config/config.local.yaml
+config/config.yaml
 
 # Python
 __pycache__/

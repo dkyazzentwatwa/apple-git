@@ -114,6 +114,7 @@ def apple_git_instance(mock_settings):
 
         # Ensure MockRepoPath.exists() returns True by default
         MockRepoPath.exists.return_value = True
+        MockRepoPath.name = "mock_repo_name" # Added this line
         MockFormatComment.side_effect = lambda heading, bullets, intro="", outro="": f"Formatted: {heading}"
         yield instance
 
@@ -256,6 +257,39 @@ async def test_process_done_no_pr(apple_git_instance):
 
 
 @pytest.mark.asyncio
+async def test_process_handle_done_merge_conflict(apple_git_instance):
+    """Test processing a reminder in done list where PR merge fails."""
+    reminder = MockReminder("rem1", "Test Merge Conflict", "#merge", "dev-done")
+    apple_git_instance.reminders_done.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "dev-done",
+        "reminder_title": "Test Merge Conflict",
+        "github_pr_number": 101,  # Has an associated PR
+    }
+    apple_git_instance.github_client.merge_pr.return_value = False  # Simulate merge failure
+
+    apple_git_instance.process()
+
+    apple_git_instance.github_client.merge_pr.assert_called_once_with(101)
+    apple_git_instance.github_client.add_issue_comment.assert_called_once_with(
+        1,
+        f"Formatted: Merge Failed",
+    )
+    apple_git_instance.reminders_done.update_status_line.assert_called_once_with(
+        "rem1", "⚠️ Merge Conflict — Fix manually"
+    )
+    apple_git_instance.notes_client.log_event.assert_called_once_with(
+        "merge_failed",
+        {"reminder": reminder.name, "pr_number": "101", "reason": "conflict"},
+    )
+    apple_git_instance.github_client.close_issue.assert_not_called()
+    apple_git_instance.store.delete_mapping.assert_not_called()
+    apple_git_instance.reminders_done.complete_reminder.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_run_forever_shutdown(apple_git_instance):
     """Test that run_forever can be shut down gracefully."""
     # Simulate shutdown request after one loop
@@ -297,14 +331,14 @@ async def test_reap_connector_procs_success(apple_git_instance):
 
     apple_git_instance._reap_claude_procs()
 
-    apple_git_instance.github_client.add_issue_comment.assert_called_with(
+    apple_git_instance.github_client.add_issue_comment.assert_called_once_with(
         1,
         f"Formatted: claude Success",
     )
-    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_with(
+    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once_with(
         "rem1", "✅ Done — move to dev-review"
     )
-    apple_git_instance.notes_client.log_event.assert_called_with(
+    apple_git_instance.notes_client.log_event.assert_called_once_with(
         "connector_finished", {"issue_number": "1", "branch": "issue-1"}
     )
     assert 1 not in apple_git_instance._claude_procs
@@ -319,14 +353,14 @@ async def test_reap_connector_procs_error(apple_git_instance):
 
     apple_git_instance._reap_claude_procs()
 
-    apple_git_instance.github_client.add_issue_comment.assert_called_with(
+    apple_git_instance.github_client.add_issue_comment.assert_called_once_with(
         1,
         f"Formatted: claude Error",
     )
-    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_with(
+    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once_with(
         "rem1", "⚠️ claude error (exit 1) — check logs"
     )
-    apple_git_instance.notes_client.log_event.assert_called_with(
+    apple_git_instance.notes_client.log_event.assert_called_once_with(
         "claude_error", {"issue_number": "1", "branch": "issue-1", "exit_code": "1"}
     )
     assert 1 not in apple_git_instance._claude_procs
