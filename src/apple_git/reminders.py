@@ -66,13 +66,23 @@ class RemindersClient:
         }}
 
         const reminderListName = taskList.name();
-        const rows = taskList.reminders().map((r) => ({{
-            id: r.id(),
-            name: r.name(),
-            body: r.body() || "",
-            url: r.url() || "",
-            list_name: reminderListName,
-        }}));
+        const rows = taskList.reminders().map((r) => {{
+            let body = "";
+            let url = "";
+            try {{
+                body = r.body();
+            }} catch (_err) {{}}
+            try {{
+                url = r.url();
+            }} catch (_err) {{}}
+            return {{
+                id: r.id(),
+                name: r.name(),
+                body: body || "",
+                url: url || "",
+                list_name: reminderListName,
+            }};
+        }});
 
         JSON.stringify(rows);
         """
@@ -111,12 +121,14 @@ class RemindersClient:
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            body_value = row.get("body")
+            url_value = row.get("url")
             reminders.append(
                 Reminder(
                     id=str(row.get("id", "")).strip(),
                     name=str(row.get("name", "")).strip(),
-                    body=str(row.get("body", "")),
-                    url=str(row.get("url", "")),
+                    body="" if body_value is None else str(body_value),
+                    url="" if url_value is None else str(url_value),
                     list_name=str(row.get("list_name", "")).strip(),
                     creation_date="",
                     due_date="",
@@ -360,6 +372,59 @@ class RemindersClient:
             return result.returncode == 0 and "ok" in result.stdout
         except Exception as exc:
             logger.warning("Error setting reminder URL: %s", exc)
+            return False
+
+    def move_reminder_to_list(self, reminder_id: str, destination_list_name: str) -> bool:
+        source_list = self._resolve_list_selector()
+        if source_list is None:
+            return False
+
+        from . import apple_tools
+
+        destination_list = apple_tools.reminders_resolve_list_selector(destination_list_name)
+        if destination_list is None:
+            logger.warning("Unable to resolve destination Reminders list %r", destination_list_name)
+            return False
+
+        if source_list.get("id"):
+            escaped_source_list_id = source_list["id"].replace('"', '\\"')
+            source_list_clause = f'set sourceList to first list whose id is "{escaped_source_list_id}"'
+        else:
+            escaped_source_list_name = source_list["name"].replace('"', '\\"')
+            source_list_clause = f'set sourceList to list "{escaped_source_list_name}"'
+
+        if destination_list.get("id"):
+            escaped_destination_list_id = str(destination_list["id"]).replace('"', '\\"')
+            destination_list_clause = f'set destinationList to first list whose id is "{escaped_destination_list_id}"'
+        else:
+            escaped_destination_list_name = str(destination_list["name"]).replace('"', '\\"')
+            destination_list_clause = f'set destinationList to list "{escaped_destination_list_name}"'
+
+        escaped_id = reminder_id.replace('"', '\\"')
+        script = f'''
+        tell {REMINDERS_APP_TARGET}
+            try
+                {source_list_clause}
+                {destination_list_clause}
+                set matchedReminder to (first reminder of sourceList whose id is "{escaped_id}")
+                move matchedReminder to destinationList
+                return "ok"
+            on error errMsg
+                return "error: " & errMsg
+            end try
+        end tell
+        '''
+
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            return result.returncode == 0 and "ok" in result.stdout
+        except Exception as exc:
+            logger.warning("Error moving reminder to list: %s", exc)
             return False
 
 

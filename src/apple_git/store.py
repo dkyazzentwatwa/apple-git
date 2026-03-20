@@ -280,3 +280,18 @@ class SQLiteStore:
                 (run_id,),
             ).fetchone()
             return self._row_to_dict(row)
+
+    def get_latest_connector_run_for_issue(self, github_issue_number: int) -> dict[str, Any] | None:
+        conn = self._connect()
+        with self._lock:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM connector_runs
+                WHERE github_issue_number = ?
+                ORDER BY started_at DESC, rowid DESC
+                LIMIT 1
+                """,
+                (github_issue_number,),
+            ).fetchone()
+            return self._row_to_dict(row)

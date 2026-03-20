@@ -7,7 +7,7 @@ from typing import Any
 logger = logging.getLogger("apple_git.apple_tools")
 
 
-def reminders_resolve_list_selector(selector: str) -> dict[str, str] | None:
+def reminders_resolve_list_selector(selector: str) -> dict[str, Any] | None:
     if not selector:
         return None
 
@@ -55,6 +55,7 @@ def reminders_resolve_list_selector(selector: str) -> dict[str, str] | None:
             }
     except Exception as exc:
         logger.warning("Error resolving reminders list: %s", exc)
+        return None
 
     return None
 

@@ -34,7 +34,7 @@ reminders:
 3. `apple-git` will:
    - create the GitHub issue
    - add `#branch:issue-{number}` to the reminder body
-   - attach the issue URL to the reminder
+   - append the issue number and issue URL to the reminder body
    - post a canonical implementation plan comment on the issue
 
 The reminder stays in `issue-plan` until you approve the plan.

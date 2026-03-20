@@ -67,7 +67,7 @@ def apple_git_instance(mock_settings):
         patch("apple_git.github.GitHubClient") as MockGitHubClient,
         patch("apple_git.notes.NotesClient") as MockNotesClient,
         patch("apple_git.connector.build_connector") as MockBuildConnector,
-        patch("apple_git.planner.IssuePlanner") as MockIssuePlanner,
+        patch("apple_git.planner.build_issue_planner") as MockBuildIssuePlanner,
         patch("apple_git.issue_analyzer.IssueAnalyzer") as MockIssueAnalyzer,
         patch("apple_git.reviewer.PRReviewer") as MockPRReviewer,
         patch("apple_git.security_reviewer.SecurityReviewer") as MockSecurityReviewer,
@@ -96,7 +96,7 @@ def apple_git_instance(mock_settings):
         instance.connector = MockBuildConnector.return_value
         instance.connector.backend_name = "claude"
         
-        instance.issue_planner = MockIssuePlanner.return_value
+        instance.issue_planner = MockBuildIssuePlanner.return_value
         instance.issue_analyzer = MockIssueAnalyzer.return_value
         instance.pr_reviewer = MockPRReviewer.return_value
         instance.security_reviewer = MockSecurityReviewer.return_value
@@ -129,6 +129,40 @@ def apple_git_instance(mock_settings):
         yield instance
 
 
+def test_init_builds_planner_from_connector_settings_without_anthropic_key():
+    settings = AppleGitSettings(
+        poll_interval_seconds=0.1,
+        db_path=Path(":memory:"),
+        connector_logs_dir=Path("/tmp/connector-runs"),
+        repo_path=Path("/tmp/mock_repo"),
+        anthropic_api_key="",
+        connector_backend="codex",
+        connector_model="gpt-5.4-mini",
+        connector_command="codex",
+    )
+
+    with (
+        patch("apple_git.store.SQLiteStore"),
+        patch("apple_git.reminders.RemindersClient"),
+        patch("apple_git.github.GitHubClient"),
+        patch("apple_git.notes.NotesClient"),
+        patch("apple_git.connector.build_connector") as mock_build_connector,
+        patch("apple_git.planner.build_issue_planner") as mock_build_issue_planner,
+    ):
+        mock_build_connector.return_value.backend_name = "codex"
+        planner_instance = MagicMock()
+        mock_build_issue_planner.return_value = planner_instance
+
+        instance = AppleGit(settings)
+
+    mock_build_issue_planner.assert_called_once_with(
+        backend="codex",
+        model="gpt-5.4-mini",
+        command="codex",
+    )
+    assert instance.issue_planner is planner_instance
+
+
 @pytest.mark.asyncio
 async def test_process_issue_plan_creates_issue_and_posts_plan(apple_git_instance):
     """Test processing a reminder in issue-plan creates an issue and canonical plan comment."""
@@ -146,8 +180,11 @@ async def test_process_issue_plan_creates_issue_and_posts_plan(apple_git_instanc
     apple_git_instance.store.upsert_issue_mapping.assert_called_once()
     apple_git_instance.connector.spawn.assert_not_called()
     apple_git_instance.reminders_issue_plan.update_body_tags.assert_called_once()
-    apple_git_instance.reminders_issue_plan.set_reminder_url.assert_called_once()
-    apple_git_instance.reminders_issue_plan.annotate_reminder.assert_called_once()
+    apple_git_instance.reminders_issue_plan.set_reminder_url.assert_not_called()
+    apple_git_instance.reminders_issue_plan.annotate_reminder.assert_called_once_with(
+        "rem1",
+        "Issue #1\nIssue: http://github.com/issue/1",
+    )
     apple_git_instance.github_client.add_issue_comment.assert_called()  # Picked Up, AI Analysis
     apple_git_instance.reminders_issue_plan.update_status_line.assert_called_once_with(
         "rem1", "📝 Plan ready — move to issue-ready to start coding"
@@ -303,6 +340,7 @@ async def test_process_issue_ready_starts_connector_from_existing_plan(apple_git
         "reminder_title": "Test Issue",
         "github_pr_number": None,
     }
+    apple_git_instance.store.get_latest_connector_run_for_issue.return_value = None
 
     apple_git_instance.process()
 
@@ -310,6 +348,34 @@ async def test_process_issue_ready_starts_connector_from_existing_plan(apple_git
     apple_git_instance.github_client.get_issue_comment_by_marker.assert_called_once()
     apple_git_instance.store.update_section.assert_called_once_with("rem1", "dev-issue-ready")
     apple_git_instance.store.create_connector_run.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_process_issue_ready_does_not_respawn_after_successful_run(apple_git_instance):
+    """Test that issue-ready does not respawn work after a successful connector run."""
+    reminder = MockReminder("rem1", "Test Issue", "Issue Body #branch:issue-1", "dev-issue-ready")
+    apple_git_instance.reminders_issue_ready.fetch_all.return_value = [reminder]
+    apple_git_instance.store.get_mapping_by_reminder_id.return_value = {
+        "reminder_id": "rem1",
+        "github_issue_number": 1,
+        "section": "issue-plan",
+        "reminder_title": "Test Issue",
+        "github_pr_number": None,
+    }
+    apple_git_instance.store.get_latest_connector_run_for_issue.return_value = {
+        "run_id": "run-1",
+        "status": "succeeded",
+        "backend": "codex",
+        "branch": "issue-1",
+    }
+
+    apple_git_instance.process()
+
+    apple_git_instance.connector.spawn.assert_not_called()
+    apple_git_instance.store.create_connector_run.assert_not_called()
+    apple_git_instance.reminders_issue_ready.move_reminder_to_list.assert_called_once_with(
+        "rem1", apple_git_instance.settings.reminders.list_review
+    )
 
 
 @pytest.mark.asyncio
@@ -325,6 +391,7 @@ async def test_process_issue_ready_requires_existing_plan_comment(apple_git_inst
         "github_pr_number": None,
     }
     apple_git_instance.github_client.get_issue_comment_by_marker.return_value = ""
+    apple_git_instance.store.get_latest_connector_run_for_issue.return_value = None
 
     apple_git_instance.process()
 
@@ -604,8 +671,8 @@ async def test_reap_connector_procs_success(apple_git_instance):
         1,
         "Formatted: claude Success",
     )
-    apple_git_instance.reminders_issue_ready.update_status_line.assert_called_once_with(
-        "rem1", "✅ Done — move to dev-review"
+    apple_git_instance.reminders_issue_ready.move_reminder_to_list.assert_called_once_with(
+        "rem1", apple_git_instance.settings.reminders.list_review
     )
     apple_git_instance.notes_client.log_event.assert_called_once_with(
         "connector_finished", {"issue_number": "1", "branch": "issue-1"}

@@ -41,3 +41,22 @@ def test_fetch_all_returns_empty_list_on_invalid_json():
         reminders = client.fetch_all()
 
     assert reminders == []
+
+
+def test_fetch_all_handles_null_body_and_url_without_failing():
+    client = RemindersClient("issue-plan")
+    result = MagicMock()
+    result.returncode = 0
+    result.stdout = (
+        '[{"id":"rem-1","name":"Title","body":null,"url":"","list_name":"issue-plan"}]'
+    )
+
+    with (
+        patch.object(client, "_resolve_list_selector", return_value={"id": "list-123", "name": "issue-plan"}),
+        patch("apple_git.reminders.subprocess.run", return_value=result),
+    ):
+        reminders = client.fetch_all()
+
+    assert len(reminders) == 1
+    assert reminders[0].body == ""
+    assert reminders[0].url == ""

@@ -56,13 +56,16 @@ class AppleGit:
         )
         logger.info("Using connector backend: %s", self.connector.backend_name)
 
-        # Initialize AI reviewers if API key and flags are set
-        self.issue_planner = None
+        # Initialize issue planner from the configured connector backend.
+        self.issue_planner = planner.build_issue_planner(
+            backend=settings.connector_backend,
+            model=settings.connector_model,
+            command=settings.connector_command,
+        )
         self.issue_analyzer = None
         self.pr_reviewer = None
         self.security_reviewer = None
         if settings.anthropic_api_key:
-            self.issue_planner = planner.IssuePlanner(settings.anthropic_api_key)
             self.issue_analyzer = issue_analyzer.IssueAnalyzer(settings.anthropic_api_key)
             if settings.enable_pr_review:
                 self.pr_reviewer = reviewer.PRReviewer(settings.anthropic_api_key)
@@ -289,9 +292,14 @@ Output requirements:
                             ],
                         )
                         self.github_client.add_issue_comment(issue_number, comment)
-                    self.reminders_issue_ready.update_status_line(
-                        reminder_id, "✅ Done — move to dev-review"
+                    moved = self.reminders_issue_ready.move_reminder_to_list(
+                        reminder_id,
+                        self.settings.reminders.list_review,
                     )
+                    if not moved:
+                        self.reminders_issue_ready.update_status_line(
+                            reminder_id, "✅ Done — move to dev-review"
+                        )
                     if self.notes_client:
                         payload = {
                             "issue_number": str(issue_number),
@@ -403,8 +411,10 @@ Output requirements:
             )
             branch_name = f"issue-{issue.number}"
             self.reminders_issue_plan.update_body_tags(rem.id, "", f"#branch:{branch_name}")
-            self.reminders_issue_plan.set_reminder_url(rem.id, issue.url)
-            self.reminders_issue_plan.annotate_reminder(rem.id, f"Issue #{issue.number}")
+            self.reminders_issue_plan.annotate_reminder(
+                rem.id,
+                f"Issue #{issue.number}\nIssue: {issue.url}",
+            )
 
             comment = github.GitHubClient._format_comment(
                 "Issue Picked Up",
@@ -489,6 +499,23 @@ Output requirements:
         issue_number = mapping.get("github_issue_number")
         if not issue_number:
             logger.warning("Reminder %s in issue-ready list but has no GitHub issue number", rem.id)
+            return
+
+        latest_run = self.store.get_latest_connector_run_for_issue(issue_number)
+        if latest_run and latest_run.get("status") == "succeeded":
+            logger.info(
+                "Connector run %s for issue #%d already succeeded; waiting for review move",
+                latest_run.get("run_id", ""),
+                issue_number,
+            )
+            moved = self.reminders_issue_ready.move_reminder_to_list(
+                rem.id,
+                self.settings.reminders.list_review,
+            )
+            if not moved:
+                self.reminders_issue_ready.update_status_line(
+                    rem.id, "✅ Done — move to dev-review"
+                )
             return
 
         approved_plan = self.github_client.get_issue_comment_by_marker(issue_number, PLAN_COMMENT_MARKER)
