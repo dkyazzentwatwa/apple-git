@@ -55,7 +55,7 @@ If you want a lightweight alternative to manually interacting with GitHub for ev
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/yourusername/apple-git.git
+    git clone https://github.com/dkyazzentwatwa/apple-git.git
     cd apple-git
     ```
 
@@ -78,12 +78,12 @@ If you want a lightweight alternative to manually interacting with GitHub for ev
     APPLE_GIT_CONNECTOR_BACKEND=codex
     APPLE_GIT_CONNECTOR_MODEL=gpt-5.4-mini
     APPLE_GIT_CONNECTOR_COMMAND=codex
-    ANTHROPIC_API_KEY=your_anthropic_key  # optional
+    APPLE_GIT_ANTHROPIC_API_KEY=your_anthropic_key  # optional
     ```
 
 2.  **Reminders App Setup:**
     Create the necessary lists in Apple Reminders (e.g., `dev-backlog`, `issue-plan`, `dev-issue-ready`, `dev-review`, `dev-done`).
-    *See [REMINDERS_SETUP.md](REMINDERS_SETUP.md) for a detailed walkthrough of the workflow and list setup.*
+    *See [docs/REMINDERS_SETUP.md](docs/REMINDERS_SETUP.md) for a detailed walkthrough of the workflow and list setup.*
 
 3.  **Application Config (Optional):**
     Customize list names and polling intervals in `config/config.yaml`.

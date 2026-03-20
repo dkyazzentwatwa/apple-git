@@ -101,6 +101,27 @@ def test_env_vars_override_yaml(tmp_path, clean_env):
     assert settings.poll_interval_seconds == 10.0
 
 
+def test_github_repo_and_anthropic_env_vars_override_yaml(tmp_path, clean_env):
+    """Test that explicit env vars override YAML for repo and Anthropic settings."""
+    config_data = {
+        "github": {
+            "repo": "yaml_owner/yaml_repo",
+        },
+        "anthropic_api_key": "yaml_anthropic_key",
+    }
+    config_file = tmp_path / "config.yaml"
+    with open(config_file, "w") as f:
+        yaml.dump(config_data, f)
+
+    os.environ["APPLE_GIT_GITHUB_REPO"] = "env_owner/env_repo"
+    os.environ["APPLE_GIT_ANTHROPIC_API_KEY"] = "env_anthropic_key"
+
+    settings = AppleGitSettings.load_from_yaml(config_file)
+
+    assert settings.github.repo == "env_owner/env_repo"
+    assert settings.anthropic_api_key == "env_anthropic_key"
+
+
 def test_path_resolution():
     """Test that path settings are resolved correctly via validator."""
     settings = AppleGitSettings(

@@ -49,12 +49,13 @@ If you want `apple-git` to regenerate the plan for the existing issue, leave the
    - look up the existing issue mapping
    - load the canonical plan comment
    - start the configured connector on the issue branch
+   - move the reminder to `dev-review` when the worker finishes successfully
 
 If the reminder reaches `dev-issue-ready` without a mapping or without the canonical plan comment, `apple-git` blocks and updates the reminder status instead of starting code generation.
 
 ### Review
 
-Move the reminder to **dev-review** when the branch is ready.
+Use **dev-review** as the manual validation stage. Review and test the generated branch there.
 
 If the reminder body contains `#branch:issue-123`, `apple-git` creates the PR automatically. If the body contains a GitHub PR URL instead, `apple-git` links that PR.
 
@@ -69,7 +70,7 @@ Move the reminder to **dev-done** after the PR is merged, or add `#merge` if you
 | `dev-backlog` | No GitHub action |
 | `issue-plan` | Create issue and implementation plan |
 | `dev-issue-ready` | Start code generation from approved plan |
-| `dev-review` | Create or link PR |
+| `dev-review` | Review/test branch; create or link PR |
 | `dev-done` | Merge PR optionally, close issue, complete reminder |
 
 ## Troubleshooting

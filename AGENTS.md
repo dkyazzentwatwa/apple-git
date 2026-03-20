@@ -1,6 +1,6 @@
 # AGENTS.md - apple-git Development Guide
 
-This file is the shared source of truth for coding agents working in this repository. Keep it concise, repo-specific, and aligned with the current codebase. Use `README.md` for user-facing setup and `REMINDERS_SETUP.md` for the operator workflow in Apple Reminders.
+This file is the shared source of truth for coding agents working in this repository. Keep it concise, repo-specific, and aligned with the current codebase. Use `README.md` for user-facing setup and `docs/REMINDERS_SETUP.md` for the operator workflow in Apple Reminders.
 
 ## Project Overview
 
@@ -195,7 +195,7 @@ Useful current test files:
 
 - This project is macOS-specific because Reminders and Notes integrations rely on AppleScript
 - Keep repo documentation aligned with the actual code, not aspirational workflow ideas
-- If `README.md` or `REMINDERS_SETUP.md` contains deeper workflow/setup detail, reference it instead of duplicating large sections here
+- If `README.md` or `docs/REMINDERS_SETUP.md` contains deeper workflow/setup detail, reference it instead of duplicating large sections here
 - Avoid introducing stale filenames, settings, or modules into agent-facing docs
 - Do not assume live GitHub, Anthropic, or Apple app access during development or tests
 

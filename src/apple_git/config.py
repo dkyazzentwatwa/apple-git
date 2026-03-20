@@ -84,6 +84,12 @@ class AppleGitSettings(BaseSettings):
         env_token = os.environ.get("GITHUB_TOKEN", "")
         if env_token:
             github_data["token"] = env_token
+        env_repo = os.environ.get("APPLE_GIT_GITHUB_REPO", "")
+        if env_repo:
+            github_data["repo"] = env_repo
+        env_base_branch = os.environ.get("APPLE_GIT_GITHUB_BASE_BRANCH", "")
+        if env_base_branch:
+            github_data["base_branch"] = env_base_branch
 
         # Let APPLE_GIT_* env vars override YAML values (env takes priority)
         _env_str_overrides = {
