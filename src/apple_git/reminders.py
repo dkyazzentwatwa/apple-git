@@ -28,17 +28,22 @@ class RemindersClient:
         self._resolved_list_cache: dict | None = None
 
     def _resolve_list_selector(self) -> dict | None:
+        if self._resolved_list_cache is not None:
+            return self._resolved_list_cache
+
         from . import apple_tools
         resolved = apple_tools.reminders_resolve_list_selector(self.list_name)
         if resolved is None:
             logger.warning("Unable to resolve Reminders selector %r", self.list_name)
             return None
-        return {
+
+        self._resolved_list_cache = {
             "id": str(resolved.get("id", "")),
             "name": str(resolved.get("name", "")),
             "path": str(resolved.get("path", "")),
             "source": str(resolved.get("source", "")),
         }
+        return self._resolved_list_cache
 
     def fetch_all(self) -> list[Reminder]:
         resolved_list = self._resolve_list_selector()
@@ -451,11 +456,17 @@ def extract_pr_number(text: str) -> int | None:
 
 
 def has_merge_tag(text: str) -> bool:
+    # Use a faster case-insensitive check by lowercasing only once
     return "#merge" in text.lower()
 
 
 def has_tag(text: str, tag: str) -> bool:
-    return tag.lower() in text.lower().split()
+    # Avoid split() if possible, but keep correctness for word boundaries
+    lower_text = text.lower()
+    lower_tag = tag.lower()
+    if lower_tag not in lower_text:
+        return False
+    return lower_tag in lower_text.split()
 
 
 def strip_tag(text: str, tag: str) -> str:
@@ -467,7 +478,12 @@ def strip_tag(text: str, tag: str) -> str:
 def extract_operator_feedback(text: str) -> str:
     lines: list[str] = []
     for raw_line in text.splitlines():
-        cleaned_line = COMMAND_TAG_PATTERN.sub("", raw_line).strip()
+        # Only use regex if there are likely tags to remove
+        if "#" in raw_line:
+            cleaned_line = COMMAND_TAG_PATTERN.sub("", raw_line).strip()
+        else:
+            cleaned_line = raw_line.strip()
+
         if cleaned_line and not cleaned_line.startswith("Status:"):
             lines.append(cleaned_line)
     return "\n".join(lines).strip()

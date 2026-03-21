@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -23,16 +24,18 @@ def generate_tree(root: Path, max_depth: int = 2, max_files: int = 60) -> str:
 
         try:
             # Sort: directories first, then files
-            entries = sorted(
-                list(path.iterdir()),
-                key=lambda e: (not e.is_dir(), e.name.lower())
-            )
-        except (FileNotFoundError, PermissionError):
+            with os.scandir(str(path)) as it:
+                entries = sorted(
+                    list(it),
+                    key=lambda e: (not e.is_dir(), e.name.lower())
+                )
+        except (FileNotFoundError, PermissionError, NotADirectoryError):
             return
 
         filtered = [
             e for e in entries
-            if e.name not in ignore_dirs and e.suffix not in ignore_exts
+            if e.name not in ignore_dirs
+            and os.path.splitext(e.name)[1] not in ignore_exts
             and not e.is_symlink()
         ]
 
@@ -48,7 +51,7 @@ def generate_tree(root: Path, max_depth: int = 2, max_files: int = 60) -> str:
             output.append(f"{prefix}{connector}{entry.name}{'/' if entry.is_dir() else ''}")
 
             if entry.is_dir() and (depth + 1 <= max_depth):
-                _walk(entry, depth + 1, prefix + ("    " if is_last else "│   "))
+                _walk(Path(entry.path), depth + 1, prefix + ("    " if is_last else "│   "))
 
     output.append(root.name + "/")
     _walk(root, 0, "")
